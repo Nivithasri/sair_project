@@ -20,9 +20,9 @@ sydneysiege,Group_att_follow,0.26784794674702933,0.7321520532529706,False
 story_three_shootings,pr_norm,0.3978696741854636,0.6021303258145364,False
 story_three_shootings,layer_code,0.5752732170562461,0.5752732170562461,False
 story_three_shootings,r,0.6056254582033316,0.6056254582033316,False
-story_three_shootings,Gact,0.5400618894174211,0.5400618894174211,False
-story_three_shootings,Gpre,0.5143897157860637,0.5143897157860637,False
-story_three_shootings,Group_att,0.5138313470751709,0.5138313470751709,False
+story_three_shootings,Gact,0.529043697679573,0.529043697679573,False
+story_three_shootings,Gpre,0.5,0.5,False
+story_three_shootings,Group_att,0.5,0.5,False
 story_three_shootings,Gact_follow,0.5983197790394352,0.5983197790394352,False
 story_three_shootings,Gpre_follow,0.4680451127819549,0.5319548872180451,False
 story_three_shootings,Group_att_follow,0.4680451127819549,0.5319548872180451,False

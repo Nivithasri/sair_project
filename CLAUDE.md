@@ -23,7 +23,7 @@ Centrality-Targeted Hybrid Control of Rumour–Correction Competition on Social 
 - **No leakage:** user features use only the user's OWN posts written before t_ref (entry time, or event end for S users) + profile description; never retweeted text (DECISIONS D27). Check single-feature AUC ≤ 0.95.
 - Popularity: Pop(t) = Σ_s w_s·0.5^((t−t0_s)/w), one term per kept story, w_s = log(1 + source-author followers), normalised max 1; half-life w free in Phase 5 (D26).
 - Network (Phase 3): PageRank on FOLLOW edges only (u→v = u follows v); core = top 1%; strong = follows a core node; weak = rest. mpr = τ(k1·pr_norm + k2·Info_match), τ = 1, k1 = k2 = 0.5; r = 1 − mpr_norm clipped [0.05, 0.95].
-- Groups: KMeans (seed 42) on PROFILE-ONLY features (description TF-IDF/SVD + log followers, friends, statuses, account age), k ∈ {20,50,100} by silhouette; NMI(group, first thread) must be < 0.3 (D37). Follow-Louvain kept as a robustness variant. NOT KNN on Prb (event retweets = outcome). The follow graph is collected per thread — limitation (D38). Gact = mean log1p(statuses_count); Gpre = Jaccard(group top-30 TF-IDF keywords of own pre-entry text + profiles, rumour tags); Group_att = Gact_norm × Gpre.
+- Groups: KMeans (seed 42) on PROFILE-ONLY features (description TF-IDF/SVD + log followers, friends, statuses, account age), k = 20 for every set (silhouette ~0.07 at all k); NMI(group, first thread) must be < 0.3 (D37). Follow-Louvain kept as a robustness variant. NOT KNN on Prb (event retweets = outcome). The follow graph is collected per thread — limitation (D38). Gact = mean log1p(statuses_count); Gpre = Jaccard(group top-30 TF-IDF keywords of own pre-entry text + profiles, rumour tags); Group_att = Gact_norm × Gpre.
 - Friend power: log1p of the mean over friends of timestamped replies + retweets RECEIVED before the user's t_ref, excluding the user's own; no favourites (D29).
 - S_emo: users with no emotion words → has_emotion = 0, filled with the event mean (cosine undefined).
 - Content fit, group preference: Jaccard on tag/keyword sets.
@@ -33,7 +33,7 @@ Centrality-Targeted Hybrid Control of Rumour–Correction Competition on Social 
 - Rename the paper's group-activity weight γ → `w_part` (γ clashes with a removal rate).
 - Regression target for Mult_eff = **user reposted the rumour (1/0)**.
 - `Drif1 = sigmoid((2*P1 - 1) * Mult_eff)`, `Drif2 = 1 - Drif1`.
-- Phase 4: regression sample = sided users (I ∪ A), logistic, class_weight balanced, standardised blocks; Mult_eff = κ·minmax(η) ∈ [0, κ], κ = 2 (fitted in Phase 5); P1 = friends who have taken side I / those who took any side, fallback = global share; 90% degeneracy rule for User_att / Group_att (D39–D43).
+- Phase 4: regression sample = sided users (I ∪ A), logistic, class_weight balanced, standardised blocks; Mult_eff = κ·percentile_rank(η) ∈ [0, κ], κ = 2 (fitted in Phase 5); P1 = friends who have taken side I / those who took any side, fallback = global share; 90% degeneracy rule for User_att (judged on has_text & has_emotion users) / Group_att (D39–D44); lnode_inf kept but structurally empty.
 - `delta1(t) = mean Drif1 over susceptible users`, `delta2(t) = mean Drif2` (Eq. 24's binomial reduces to this). Recompute every step.
 - **Corrected SAIR (paper's Eq. 26 swaps δ1/δ2):**
   - dS = −δ1·I·S − δ2·A·S

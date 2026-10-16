@@ -39,7 +39,8 @@ PAGERANK_ALPHA = 0.85
 TAU, K1, K2 = 1.0, 0.5, 0.5                  # Eq. 17 weights (DECISIONS D33)
 R_CLIP = (0.05, 0.95)
 TOP_K_GROUP = 30
-K_OPTIONS = [20, 50, 100]                    # KMeans k candidates, chosen by silhouette (D37)
+K_OPTIONS = [20, 50, 100]                    # silhouette reported for these k (diagnostic)
+K_GROUPS = 20                                # k used for every set: silhouette ~0.07 at all k (D37)
 PROFILE_SVD_DIMS = 50
 SILHOUETTE_SAMPLE = 5000
 MAX_THREAD_NMI = 0.3
@@ -124,7 +125,7 @@ def profile_matrix(users, t0):
 
 
 def profile_groups(users, t0):
-    """KMeans (seed 42) on profile-only features; k from K_OPTIONS by silhouette score."""
+    """KMeans (seed 42) on profile-only features with k = K_GROUPS; silhouettes for K_OPTIONS are reported."""
     X = profile_matrix(users, t0)
     rows, labels = [], {}
     for k in K_OPTIONS:
@@ -134,7 +135,7 @@ def profile_groups(users, t0):
         sil = silhouette_score(X, labels[k], sample_size=min(SILHOUETTE_SAMPLE, len(users)), random_state=dp.SEED)
         rows.append({"k": k, "silhouette": sil})
     sil = pd.DataFrame(rows)
-    best = int(sil.loc[sil["silhouette"].idxmax(), "k"])
+    best = K_GROUPS
     return pd.Series(labels[best], index=users.index, name="group"), best, sil
 
 
@@ -210,7 +211,7 @@ def build_set(key, lex, rumour_tags):
         group_rows.append({
             "set": key, "variant": variant, "primary": variant == "profile_kmeans", "N": len(users),
             "groups": len(sc), "k_chosen": k if variant == "profile_kmeans" else np.nan,
-            "silhouette": float(sil["silhouette"].max()) if variant == "profile_kmeans" else np.nan,
+            "silhouette": float(sil.loc[sil["k"] == k, "silhouette"].iloc[0]) if variant == "profile_kmeans" else np.nan,
             "modularity": modularity_f if variant == "follow_louvain" else np.nan,
             "singletons": int((sizes == 1).sum()), "smallest": int(sizes.min()), "median_size": float(sizes.median()),
             "largest": int(sizes.max()),

@@ -42,6 +42,9 @@ GPRE_EPS = 0.01
 CV_FOLDS = 5
 MAX_CV_GAP = 0.10
 SIDE_CODE = {"I": 1, "A": 2}
+VARIANTS = ["profile", "follow"]             # group variant: primary profile-KMeans, robustness follow-Louvain
+GROUP_SUFFIX = {"profile": "", "follow": "_follow"}
+VARIANT_FILE = {"profile": "", "follow": "_followgroups"}
 
 
 def sigmoid(x):
@@ -93,8 +96,10 @@ def node_blocks(G, tweets, users, net, t_ref, tags):
     return pd.DataFrame(rows).set_index("user_id"), friends
 
 
-def build_blocks(key, lex):
+def build_blocks(key, lex, variant="profile"):
+    """variant 'profile' = primary profile-KMeans groups; 'follow' = follow-Louvain groups (robustness)."""
     tweets, users, curves, G, feats, net, stories = load(key)
+    sfx = GROUP_SUFFIX[variant]
     t_ref, t0 = ft.reference_times(users, curves)
     t_ref_h = ((t_ref - t0) / pd.Timedelta(hours=1)).to_numpy(dtype=float)
     pop = ft.pop_at(stories, t_ref_h, curves["t_hours"])
@@ -105,23 +110,27 @@ def build_blocks(key, lex):
     b["t_ref_h"] = t_ref_h
     b["pop_at_ref"] = pop
 
-    # User_att (Eq. 13) with the 90% degeneracy rule (D40)
+    # User_att (Eq. 13); the 90% degeneracy rule is judged only on users with real text AND emotion
+    # words, since imputed values would hide the degeneracy (D40)
     paper_user = feats["S_emo"] * feats["Info_match"] * pop
-    user_fallback = near_zero_share(paper_user) > DEGENERATE_SHARE
+    judged = (feats["has_text"] == 1) & (feats["has_emotion"] == 1)
+    user_fallback = near_zero_share(paper_user[judged]) > DEGENERATE_SHARE
     b["user_trait"] = feats["S_emo"] if user_fallback else feats["S_emo"] * feats["Info_match"]
     b["User_att"] = b["user_trait"] * pop
 
     # Group_att (Eq. 16) with the same rule
-    paper_group = net["Gact_norm"] * net["Gpre"]
+    paper_group = net["Gact_norm" + sfx] * net["Gpre" + sfx]
     group_fallback = near_zero_share(paper_group) > DEGENERATE_SHARE
-    b["Group_att"] = net["Gact_norm"] * (net["Gpre"] + GPRE_EPS) if group_fallback else paper_group
+    b["Group_att"] = net["Gact_norm" + sfx] * (net["Gpre" + sfx] + GPRE_EPS) if group_fallback else paper_group
 
     # hnode / lnode (Eq. 14-15)
     _, tags, _ = ft.text_features(tweets, users, t_ref, lex)
     nodes, friends = node_blocks(G, tweets, users, net, t_ref, tags)
     b = b.join(nodes)
 
-    degeneracy = {"set": key, "User_att_paper_near_zero_pct": 100 * near_zero_share(paper_user),
+    degeneracy = {"set": key, "variant": variant, "User_att_judged_users": int(judged.sum()),
+                  "User_att_paper_near_zero_pct_all": 100 * near_zero_share(paper_user),
+                  "User_att_paper_near_zero_pct_judged": 100 * near_zero_share(paper_user[judged]),
                   "User_att_fallback": user_fallback, "User_att_used_near_zero_pct": 100 * near_zero_share(b["User_att"]),
                   "Group_att_paper_near_zero_pct": 100 * near_zero_share(paper_group),
                   "Group_att_fallback": group_fallback, "Group_att_used_near_zero_pct": 100 * near_zero_share(b["Group_att"]),
@@ -177,9 +186,13 @@ def regression(key, b):
     return scaler, model, coef, cv
 
 
-def mult_eff(eta, lo, hi, kappa=KAPPA):
-    """Mult_eff = kappa * (eta - min) / (max - min), clipped to [0, kappa] (D42)."""
-    return kappa * np.clip((eta - lo) / (hi - lo), 0.0, 1.0)
+def mult_eff(eta, eta_sorted, kappa=KAPPA):
+    """Mult_eff = kappa * percentile rank of eta among the regression sample's eta (mid-rank for ties),
+    in [0, kappa] (D42). eta_sorted = sorted sample eta."""
+    eta_sorted = np.asarray(eta_sorted)
+    lo = np.searchsorted(eta_sorted, eta, side="left")
+    hi = np.searchsorted(eta_sorted, eta, side="right")
+    return kappa * (lo + hi) / (2 * len(eta_sorted))
 
 
 # ---------------------------------------------------------------- P1 and Drif
@@ -203,7 +216,7 @@ def p1_from_sides(M, side_code):
     return p1, ~has
 
 
-def entry_snapshot(b, M, eta, lo, hi):
+def entry_snapshot(b, M, eta, eta_sorted):
     """P1, Mult_eff and Drif at each user's own t_ref, using friends who took a side strictly before."""
     side = b["side"].map(SIDE_CODE).fillna(0).to_numpy()
     t_enter = np.where(b["side"].notna(), b["t_ref_h"], np.inf)
@@ -222,17 +235,18 @@ def entry_snapshot(b, M, eta, lo, hi):
             tot_i, tot_a = (before == 1).sum(), (before == 2).sum()
             p1[k] = tot_i / (tot_i + tot_a) if tot_i + tot_a > 0 else 0.5
             fallback[k] = True
-    m = mult_eff(eta, lo, hi)
+    m = mult_eff(eta, eta_sorted)
     d1 = drif1_of(p1, m)
     return pd.DataFrame({"P1_entry": p1, "P1_fallback": fallback.astype(int), "Mult_eff": m,
                          "Drif1": d1, "Drif2": 1 - d1}, index=b.index)
 
 
-def make_context(key):
-    """Everything Phase 5 needs to evaluate drif(t) for this set."""
-    with open(os.path.join(dp.PROCESSED, f"drive_model_{key}.json")) as f:
+def make_context(key, variant="profile"):
+    """Everything Phase 5 needs to evaluate drif(t) for this set (and group variant)."""
+    tag = key + VARIANT_FILE[variant]
+    with open(os.path.join(dp.PROCESSED, f"drive_model_{tag}.json")) as f:
         model = json.load(f)
-    b = pd.read_csv(os.path.join(dp.PROCESSED, f"drive_{key}.csv"), dtype={"user_id": str}).set_index("user_id")
+    b = pd.read_csv(os.path.join(dp.PROCESSED, f"drive_{tag}.csv"), dtype={"user_id": str}).set_index("user_id")
     edges = pd.read_csv(os.path.join(dp.PROCESSED, f"friends_{key}.csv"), dtype={"user_id": str, "friend_id": str})
     curves = pd.read_csv(os.path.join(dp.PROCESSED, f"real_curves_{key}.csv"))
     stories = pd.read_csv(os.path.join(dp.RESULTS, f"pop_stories_{key}.csv"))
@@ -253,37 +267,70 @@ def drif(ctx, t, side_code=None, kappa=None, half_life_h=ft.POP_HALF_LIFE_H):
     X = np.column_stack([ctx["user_trait"] * pop_t, ctx["static"]])
     z = (X - np.array(m["scaler_mean"])) / np.array(m["scaler_scale"])
     eta = m["intercept"] + z @ np.array(m["coef"])
-    me = mult_eff(eta, m["eta_min"], m["eta_max"], m["kappa"] if kappa is None else kappa)
+    me = mult_eff(eta, m["eta_sorted"], m["kappa"] if kappa is None else kappa)
     p1, _ = p1_from_sides(ctx["M"], side_code)
     return p1, me, drif1_of(p1, me)
 
 
 # ---------------------------------------------------------------- per set
 
-def run_set(key, lex):
-    b, degeneracy, edges = build_blocks(key, lex)
+def within_group_auc(y, score, groups):
+    """Pooled AUC over pairs (positive, negative) taken only WITHIN the same group (ties count 1/2).
+    Returns AUC, number of groups with both classes, and number of users in them."""
+    y, score, groups = np.asarray(y), np.asarray(score, dtype=float), np.asarray(groups)
+    good = bad = 0.0
+    n_groups = n_users = 0
+    for g in np.unique(groups):
+        m = groups == g
+        pos, neg = score[m & (y == 1)], np.sort(score[m & (y == 0)])
+        if len(pos) == 0 or len(neg) == 0:
+            continue
+        n_groups += 1
+        n_users += int(m.sum())
+        below = np.searchsorted(neg, pos, side="left")
+        ties = np.searchsorted(neg, pos, side="right") - below
+        good += below.sum() + 0.5 * ties.sum()
+        bad += len(pos) * len(neg)
+    return (good / bad if bad else np.nan), n_groups, n_users
+
+
+def p1_thread_diagnostic(key, b):
+    """How much of P1's separation is thread identity? AUC of P1 at entry overall vs within threads
+    that contain both I and A users (D44)."""
+    s = b[b["side"].notna()]
+    y = (s["side"] == "I").astype(int).to_numpy()
+    auc_w, n_threads, n_users = within_group_auc(y, s["P1_entry"], s["first_thread"])
+    return {"set": key, "auc_P1_overall": roc_auc_score(y, s["P1_entry"]), "threads_total": s["first_thread"].nunique(),
+            "threads_with_I_and_A": n_threads, "users_in_those_threads": n_users,
+            "auc_P1_within_thread_pooled": auc_w}
+
+
+def run_set(key, lex, variant="profile"):
+    tag = key + VARIANT_FILE[variant]
+    b, degeneracy, edges = build_blocks(key, lex, variant)
     scaler, model, coef, cv = regression(key, b)
     eta = model.intercept_[0] + scaler.transform(b[BLOCKS].to_numpy(dtype=float)) @ model.coef_[0]
     sided = b["side"].notna().to_numpy()
-    lo, hi = float(eta[sided].min()), float(eta[sided].max())
+    eta_sorted = np.sort(eta[sided])
     b["eta"] = eta
     M = friend_matrix(b, edges)
-    b = b.join(entry_snapshot(b, M, eta, lo, hi))
+    b = b.join(entry_snapshot(b, M, eta, eta_sorted))
 
-    model_json = {"set": key, "blocks": BLOCKS, "coef": model.coef_[0].tolist(), "intercept": float(model.intercept_[0]),
-                  "scaler_mean": scaler.mean_.tolist(), "scaler_scale": scaler.scale_.tolist(),
-                  "eta_min": lo, "eta_max": hi, "kappa": KAPPA,
+    model_json = {"set": key, "variant": variant, "blocks": BLOCKS, "coef": model.coef_[0].tolist(),
+                  "intercept": float(model.intercept_[0]),
+                  "scaler_mean": scaler.mean_.tolist(), "scaler_scale": scaler.scale_.tolist(), "kappa": KAPPA,
                   "user_att_fallback": bool(degeneracy["User_att_fallback"]),
-                  "group_att_fallback": bool(degeneracy["Group_att_fallback"]), "gpre_eps": GPRE_EPS}
-    with open(os.path.join(dp.PROCESSED, f"drive_model_{key}.json"), "w") as f:
-        json.dump(model_json, f, indent=1)
-    b.to_csv(os.path.join(dp.PROCESSED, f"drive_{key}.csv"))
+                  "group_att_fallback": bool(degeneracy["Group_att_fallback"]), "gpre_eps": GPRE_EPS,
+                  "eta_sorted": [round(float(x), 8) for x in eta_sorted]}
+    with open(os.path.join(dp.PROCESSED, f"drive_model_{tag}.json"), "w") as f:
+        json.dump(model_json, f)
+    b.to_csv(os.path.join(dp.PROCESSED, f"drive_{tag}.csv"))
     edges.to_csv(os.path.join(dp.PROCESSED, f"friends_{key}.csv"), index=False)
-    snapshot = {"set": key, "P1_fallback_pct": 100 * b["P1_fallback"].mean(),
+    snapshot = {"set": key, "variant": variant, "P1_fallback_pct": 100 * b["P1_fallback"].mean(),
                 "Mult_eff_mean": b["Mult_eff"].mean(), "Drif1_mean_I": b.loc[b["side"] == "I", "Drif1"].mean(),
                 "Drif1_mean_A": b.loc[b["side"] == "A", "Drif1"].mean(),
                 "Drif1_mean_S": b.loc[b["side"].isna(), "Drif1"].mean()}
-    return b, degeneracy, {"set": key, **coef}, cv, snapshot
+    return b, degeneracy, {"set": key, "variant": variant, **coef}, {"variant": variant, **cv}, snapshot
 
 
 # ---------------------------------------------------------------- plots
@@ -329,15 +376,19 @@ def plot_drif_vs_p1(all_b):
 def main():
     pd.set_option("display.width", 230)
     lex = ft.load_lexicon()
-    all_b, degs, coefs, cvs, snaps = {}, [], [], [], []
+    all_b, degs, coefs, cvs, snaps, diags = {}, [], [], [], [], []
     for key in SETS:
-        b, deg, coef, cv, snap = run_set(key, lex)
-        all_b[key] = b
-        degs.append(deg)
-        coefs.append(coef)
-        cvs.append(cv)
-        snaps.append(snap)
-    degs, coefs, cvs, snaps = map(pd.DataFrame, (degs, coefs, cvs, snaps))
+        for variant in VARIANTS:
+            b, deg, coef, cv, snap = run_set(key, lex, variant)
+            degs.append(deg)
+            coefs.append(coef)
+            cvs.append(cv)
+            snaps.append(snap)
+            if variant == "profile":
+                all_b[key] = b
+                diags.append(p1_thread_diagnostic(key, b))
+    degs, coefs, cvs, snaps, diags = map(pd.DataFrame, (degs, coefs, cvs, snaps, diags))
+    diags.to_csv(os.path.join(dp.RESULTS, "phase4_p1_within_thread.csv"), index=False)
     degs.to_csv(os.path.join(dp.RESULTS, "phase4_blocks.csv"), index=False)
     coefs.to_csv(os.path.join(dp.RESULTS, "phase4_coefficients.csv"), index=False)
     cvs.to_csv(os.path.join(dp.RESULTS, "phase4_cv.csv"), index=False)
@@ -352,6 +403,8 @@ def main():
     print(cvs.round(4).to_string(index=False))
     print("\n=== Snapshot at entry ===")
     print(snaps.round(4).to_string(index=False))
+    print("\n=== P1 at entry: overall AUC vs pooled AUC within threads that contain both I and A ===")
+    print(diags.round(4).to_string(index=False))
 
 
 def check():
@@ -359,7 +412,8 @@ def check():
     d = drif1_of(0.8, 2.0)
     assert abs(d - 0.7685) < 5e-4, f"worked example gives {d:.4f}"
     print(f"worked example: Mult_eff = 2, P1 = 0.8 -> Drif1 = {d:.4f} (expected ~0.769)")
-    cvs = pd.read_csv(os.path.join(dp.RESULTS, "phase4_cv.csv")).set_index("set")
+    cvs = pd.read_csv(os.path.join(dp.RESULTS, "phase4_cv.csv"))
+    cvs = cvs[cvs["variant"] == "profile"].set_index("set")
     for key in SETS:
         b = pd.read_csv(os.path.join(dp.PROCESSED, f"drive_{key}.csv"), dtype={"user_id": str})
         users = pd.read_csv(os.path.join(dp.PROCESSED, f"users_{key}.csv"), dtype={"user_id": str})
