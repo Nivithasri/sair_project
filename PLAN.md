@@ -20,15 +20,17 @@ results/                      plots + tables
 ---
 
 ## Phase 1 — Data preparation  (`src/data_prep.py`)
-1. Load PHEME rumour-scheme events Sydney Siege (primary) + Ottawa shooting: sources, replies, retweets.
+1. Load PHEME rumour-scheme events (sources, replies, retweets); keep only FALSE + UNVERIFIED stories.
 2. Stance toward the rumour (reply stance composed with source stance; retweets inherit source stance).
    Users: first support/deny post fixes I or A; query/comment-only → S.
-3. Build graph G: follow edges + reply/retweet interaction edges (edge attribute `kind`).
-4. User table: user_id, posts, timestamps, hashtags, stance, user fields.
-5. Time bins (1 h default; 15/30 min compared, choice per event logged); real S, A, I, R counts (R = inactive 24 h).
+3. Pick events by rule (≥ 100 A users, ≥ 15 informative bins for C_I and C_A): Charlie Hebdo (primary), Sydney Siege (secondary), 1-h bins.
+4. Build graph G: follow edges + reply/retweet interaction edges (edge attribute `kind`). User table.
+5. Cumulative entry curves C_I(t), C_A(t) = fitting target, trimmed at 99% + 12 h. Expected S/A/I/R prevalence (exponential lifespan, mean 12 h) = display only.
+6. Robustness set: Ottawa story "three separate shooting incidents", 15-min bins.
+7. Diagnostics: event comparison, stories per event, stance breakdown by post kind, graph stats.
 
-**Output:** `data/processed/graph_<event>.gpickle`, `users_<event>.csv`, `real_curves_<event>.csv`
-**Check:** curves plotted; S+A+I+R = total users every hour; I and A rise then fall.
+**Output:** `data/processed/graph_<event>.gpickle`, `users_<event>.csv`, `real_curves_<event>.csv` (prevalence + C_I, C_A); `results/phase1_*.csv`, plots.
+**Check:** no TRUE stories; S+A+I+R = N every bin; C_I, C_A non-decreasing and saturated (last 10% of bins add < 5%); I prevalence drops ≤ 50% in one bin; retweets of neutral sources never I/A; chosen events pass the event rule.
 
 ## Phase 2 — User features  (`src/features.py`)  — docs/SAIR_paper.md §2
 1. Emotion vectors (NRC, 8 dims, recency-weighted) → emotional similarity (cosine).
@@ -56,8 +58,8 @@ results/                      plots + tables
 ## Phase 5 — SAIR simulation & validation  (`src/sair.py`)  — docs/SAIR_paper.md §5
 1. δ1(t), δ2(t) = mean pushes over susceptible users, recomputed each hour.
 2. Euler loop of the corrected SAIR equations.
-3. Fit free params (half-life w, scale) to real curves with scipy.optimize.minimize.
-4. RMSE (predicted vs real I and A).
+3. Fit free params (half-life w, scale) to the real **cumulative** curves C_I, C_A (model: cumulative inflow ∫δ1·I·S, ∫δ2·A·S) with scipy.optimize.minimize.
+4. RMSE (predicted vs real C_I and C_A); compare shape/timing, not absolute peak height.
 
 **Output:** Plot 1 (S/A/I/R curves), Plot 2 (predicted vs real + RMSE). **Check:** sum = 1 each step.
 

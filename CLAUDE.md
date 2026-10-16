@@ -9,13 +9,15 @@ Centrality-Targeted Hybrid Control of Rumour–Correction Competition on Social 
 
 ## How to work
 - Work **ONE phase at a time** from `PLAN.md`. Never start the next phase without my approval.
-- For each phase: read the relevant `docs/` section → propose a short plan → code → **run the phase check** → show output/plots → summarise in ≤5 lines.
+- For each phase: read the relevant `docs/` section → propose a short plan → code → **run the phase check** → show output/plots → give a **full, detailed final report**: everything done step by step, files created/changed/deleted, check output, numbers and tables, observations, problems and fixes, decisions logged, open questions.
+- Keep only needed files in the repo: before committing, delete stale outputs (old plots/tables, dropped events), placeholder `.gitkeep` files in folders that now have content, and scratch scripts (scratch work goes outside the repo).
 - Where the paper is vague, choose a sensible option, **log it in `DECISIONS.md`**, and tell me.
 - If something in these rules conflicts with the real data, stop and ask.
 
 ## Fixed decisions (do not change without asking)
-- Data: PHEME rumour scheme dataset (figshare 2068650), English threads. **Primary event: Sydney Siege; second event: Ottawa shooting** (replaced Germanwings, which has only 14 deniers — see DECISIONS D11).
-- State labels from stance: supports rumour → **I**, denies rumour → **A**, no post yet → **S**, inactive 24 h → **R**. A user's I/A side is fixed by their **first** support/deny post (no I↔A transition). Query/comment-only users stay S.
+- Data: PHEME rumour scheme dataset (figshare 2068650), English threads, **only FALSE and UNVERIFIED stories** (TRUE stories excluded, DECISIONS D20). **Primary event: Charlie Hebdo; secondary: Sydney Siege** (D21). Robustness set: Ottawa story "There were three separate shooting incidents", 15-min bins (D23).
+- State labels from stance: supports rumour → **I**, denies rumour → **A**, no post yet → **S**. Display prevalence uses an exponential lifespan (mean 12 h) for I/A → R (D19).
+- **Fitting target = cumulative entry curves C_I(t), C_A(t)**, trimmed at 99% + 12 h (D14, D22). Compare shape and timing, not absolute peak height (N = posting users only). A user's I/A side is fixed by their **first** support/deny post (no I↔A transition). Query/comment-only users stay S.
 - Graph: directed, **follow edges (who-follows-whom) + reply/retweet interaction edges**, each edge has attribute `kind` ∈ {follow, interaction}. Edge u→v = u receives information from v.
 - Emotion: NRC emotion lexicon, **8 dimensions**; recency weight `exp(-lam*(t_now - t_j))`.
 - Content fit, group preference: Jaccard on tag/keyword sets.

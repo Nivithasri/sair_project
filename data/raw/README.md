@@ -27,7 +27,7 @@ Extracted (`pheme-rumour-scheme-dataset/`):
   `responsetype-vs-previous` ∈ {agreed, disagreed, appeal-for-more-information, comment}, plus certainty and evidentiality.
 - `threads/en/<event>/` for **all 8 English events** (charliehebdo 74, ebola-essien 2, ferguson 46, germanwings-crash 25,
   ottawashooting 58, prince-toronto 12, putinmissing 9, sydneysiege 71 threads). The other events were extracted on
-  2026-10-16 to compare denier counts; the project uses sydneysiege + ottawashooting. Each `<thread_id>/` contains:
+  2026-10-16 to compare denier counts; the project uses charliehebdo (primary) + sydneysiege (secondary), and one ottawashooting story as a robustness set. Each `<thread_id>/` contains:
   - `source-tweets/<id>.json`, `reactions/<id>.json`: full Twitter API v1.1 tweet JSON
   - `retweets.json`: JSON lines, retweets of the source tweet (with user + timestamp)
   - `who-follows-whom.dat`: `follower_id<TAB>followee_id`, restricted to users within the thread

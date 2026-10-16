@@ -1,0 +1,4 @@
+event,N,I_users,A_users,A_over_I,C_I_bins_60m,C_A_bins_60m,C_I_bins_30m,C_A_bins_30m,bin_minutes,usable,threads_all,threads_dropped_true,stories_dropped_true,posts_dropped,users_all,users_dropped,role
+sydneysiege,3105,2834,148,0.05222300635144672,16,21,32,43,60.0,True,71,51,22,9498,11245,8140,secondary
+ottawashooting,6234,5878,253,0.04304185096971759,6,4,13,7,,False,58,35,12,9614,14211,7977,-
+charliehebdo,8251,7389,157,0.021247800784950602,51,47,101,95,60.0,True,74,39,20,14617,20599,12348,primary

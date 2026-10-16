@@ -1,0 +1,38 @@
+story,veracity,threads,users,support_users,deny_users,first_post
+The Sydney airspace has been closed,false,1,127,1,112,2014-12-15 12:01:49+00:00
+There is a hostage situation at a cafe in Sydney,true,9,1696,1616,11,2014-12-14 23:37:11+00:00
+Uber introduced surge pricing in downtown Sydney during hostage crisis,true,3,805,759,7,2014-12-15 02:13:21+00:00
+The hostage-takers are wearing suicide belts,unverified,1,423,411,7,2014-12-15 03:11:36+00:00
+(Alleged) ISIS militants are behind the hostage-taking in the Sydney cafe,false,2,147,137,7,2014-12-14 23:48:48+00:00
+There is more than one gunman involved in the hostage-taking at the Sydney cafe,false,1,266,256,6,2014-12-14 23:21:49+00:00
+The Lindt cafe hostage-taking may be a diversion for something else (another bigger terrorist event),false,1,114,102,6,2014-12-15 01:59:54+00:00
+A (black) Islamic flag is being held up in the window of cafe in Sydney's Martin Place,true,3,400,369,5,2014-12-14 23:22:59+00:00
+40-50 hostages are being held at cafe in Sydney (according to Lindt CEO),false,1,306,296,4,2014-12-15 01:53:38+00:00
+An ISIS (IS) flag is being displayed (by hostages) at the cafe in Sydney's Martin Place,false,1,296,285,4,2014-12-14 23:27:39+00:00
+Hostages are running out/escaping from the cafe,true,5,606,583,3,2014-12-15 04:37:43+00:00
+"The gunman and/or hostages have made contact with Sydney media outlet(s) (radio station, etc.)",true,2,290,265,3,2014-12-15 02:33:22+00:00
+Two more (female) hostages have run out of the cafe (for total of five hostages free so far),true,5,1115,1064,2,2014-12-15 06:12:52+00:00
+The US Consulate in Sydney has been evacuated,unverified,1,207,201,2,2014-12-15 01:43:29+00:00
+There are 13 hostages inside the Sydney cafe,false,3,194,170,2,2014-12-15 00:47:39+00:00
+Up to 20 people are being held hostage inside the Sydney cafe,false,1,115,104,2,2014-12-15 00:31:48+00:00
+A gunman has taken hostages at a cafe in Sydney's Martin Place,true,5,760,704,1,2014-12-14 23:12:32+00:00
+The siege/hostage-taking crisis is over,true,2,745,721,1,2014-12-15 15:40:07+00:00
+"""Several"" more hostages have escaped from the cafe (after initial 5)",unverified,3,661,638,1,2014-12-15 15:13:02+00:00
+At least 2 people have died,true,2,354,340,1,2014-12-15 15:44:22+00:00
+"The script on the flag reads: ""There is no God but Allah and Muhammad is the messenger of God""",true,1,302,287,1,2014-12-14 23:45:51+00:00
+The gunman behind the hostage-taking is named Man Monis,true,2,301,284,1,2014-12-15 13:56:21+00:00
+The gunman wants to speak to Prime Minister Tony Abbott,true,1,95,88,1,2014-12-15 06:40:34+00:00
+Hostages are being held by men waving an ISIS flag inside a cafe in Sydney's Martin Place,false,1,10,3,1,2014-12-15 00:51:57+00:00
+Paramedics are carrying out a number of hostages from the cafe,true,2,290,281,0,2014-12-15 15:19:37+00:00
+Police have stormed the cafe,true,1,247,244,0,2014-12-15 15:21:50+00:00
+"The gunman has said he has ""devices"" (bombs) placed in other parts of the city",true,1,244,226,0,2014-12-15 01:22:33+00:00
+The gunman has made specific demands to authorities,true,1,196,181,0,2014-12-15 07:19:05+00:00
+One of the hostages now free is Elly Chen,true,1,158,148,0,2014-12-15 14:48:08+00:00
+"The gunman's headband reads, ""We are your soldiers O Muhammad""",unverified,1,135,125,0,2014-12-15 03:30:57+00:00
+The hostage situation in the Sydney cafe is an armed robbery,false,1,123,120,0,2014-12-15 01:39:37+00:00
+The hostage-taker is down,true,1,112,109,0,2014-12-15 15:29:23+00:00
+One or more shots/live ammunition have gone off at the cafe,true,1,106,99,0,2014-12-15 15:16:01+00:00
+Martin Place/CBD is in lockdown (and surrounding buildings have been evacuated),true,1,105,101,0,2014-12-15 00:38:04+00:00
+At least one person has been shot / injured,true,1,103,101,0,2014-12-15 15:25:15+00:00
+The Sydney Opera House has been evacuated,unverified,1,97,93,0,2014-12-15 00:25:57+00:00
+Police (authorities) have been in contact with the hostage-taker,true,1,90,89,0,2014-12-15 05:09:30+00:00

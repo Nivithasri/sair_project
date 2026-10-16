@@ -1,7 +1,6 @@
 # raw data: large, re-downloadable (see data/raw/README.md)
 data/raw/*
 !data/raw/README.md
-!data/raw/.gitkeep
 
 # large intermediate files
 data/processed/*.gpickle
