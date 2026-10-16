@@ -7,6 +7,8 @@ data/processed/*.gpickle
 data/processed/tweets_*.csv
 data/processed/users_*.csv
 data/processed/features_*.csv
+data/processed/network_*.csv
+data/processed/groups_*.csv
 
 __pycache__/
 *.pyc

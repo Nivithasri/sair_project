@@ -22,6 +22,8 @@ Centrality-Targeted Hybrid Control of Rumour–Correction Competition on Social 
 - Emotion: NRC emotion lexicon, **8 dimensions**; recency weight `exp(-lam*(t_ref - t_j))`, lam = ln2/12 per h.
 - **No leakage:** user features use only the user's OWN posts written before t_ref (entry time, or event end for S users) + profile description; never retweeted text (DECISIONS D27). Check single-feature AUC ≤ 0.95.
 - Popularity: Pop(t) = Σ_s w_s·0.5^((t−t0_s)/w), one term per kept story, w_s = log(1 + source-author followers), normalised max 1; half-life w free in Phase 5 (D26).
+- Network (Phase 3): PageRank on FOLLOW edges only (u→v = u follows v); core = top 1%; strong = follows a core node; weak = rest. mpr = τ(k1·pr_norm + k2·Info_match), τ = 1, k1 = k2 = 0.5; r = 1 − mpr_norm clipped [0.05, 0.95].
+- Groups: Louvain (seed 42) on the undirected follow graph — NOT KNN on Prb (event retweets = outcome). Gact = mean log1p(statuses_count); Gpre = Jaccard(group top-30 TF-IDF keywords of own pre-entry text + profiles, rumour tags); Group_att = Gact_norm × Gpre.
 - Friend power: log1p of the mean over friends of timestamped replies + retweets RECEIVED before the user's t_ref, excluding the user's own; no favourites (D29).
 - S_emo: users with no emotion words → has_emotion = 0, filled with the event mean (cosine undefined).
 - Content fit, group preference: Jaccard on tag/keyword sets.
