@@ -11,3 +11,6 @@ data/processed/users_*.csv
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+
+# reference papers (copyrighted PDFs, kept locally only)
+papers/
