@@ -1,0 +1,7 @@
+event,bin_minutes,n_bins,I_points,I_rise_points,I_rise_fall,I_peak,I_peak_h,A_points,A_rise_points,A_rise_fall,A_peak,A_peak_h,ok,chosen
+sydneysiege,60,84,82,24,True,10480,24.0,58,22,True,164,23.0,True,True
+sydneysiege,30,166,164,48,True,10480,24.0,116,45,True,164,23.0,True,False
+sydneysiege,15,330,328,95,True,10480,23.75,232,90,True,164,22.75,True,False
+ottawashooting,60,87,85,24,True,13176,24.0,49,16,True,696,17.0,True,True
+ottawashooting,30,171,169,48,True,13176,24.0,98,32,True,696,16.5,True,False
+ottawashooting,15,340,338,96,True,13176,24.0,197,65,True,696,16.5,True,False

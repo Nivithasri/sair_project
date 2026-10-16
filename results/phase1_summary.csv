@@ -1,0 +1,3 @@
+event,threads,posts,sources,replies,retweets,duplicates_dropped,users_N,users_I_side,users_A_side,users_neutral_S,users_both_stances,edges_follow,edges_interaction,isolated_nodes,bin_minutes,n_bins,peak_I,peak_I_h,peak_A,peak_A_h,final_R,final_S
+sydneysiege,71,12876,71,1165,11640,0,11245,10556,171,518,26,15804,7348,2,60,84,10480,24.0,164,23.0,10727,518
+ottawashooting,58,16456,58,786,15612,0,14211,13206,696,309,205,26249,9591,5,60,87,13176,24.0,696,17.0,13902,309

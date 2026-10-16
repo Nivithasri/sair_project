@@ -1,0 +1,13 @@
+# raw data: large, re-downloadable (see data/raw/README.md)
+data/raw/*
+!data/raw/README.md
+!data/raw/.gitkeep
+
+# large intermediate files
+data/processed/*.gpickle
+data/processed/tweets_*.csv
+data/processed/users_*.csv
+
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
