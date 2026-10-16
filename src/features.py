@@ -236,7 +236,7 @@ def friend_power_of(u, u_friends, t_ref_u, by_target, by_pair):
     """log1p of the mean over friends j of replies + retweets received by j before t_ref_u, not made by u."""
     t = t_ref_u.timestamp()
     vals = []
-    for j in u_friends:
+    for j in sorted(u_friends):                     # fixed order: float sums reproducible across runs
         n = int(np.searchsorted(by_target.get(j, np.empty(0)), t, side="left"))
         n_self = int(np.searchsorted(by_pair.get((j, u), np.empty(0)), t, side="left"))
         vals.append(n - n_self)
@@ -250,7 +250,7 @@ def network_features(G, tweets, users, t_ref, tags):
     for u in users.index:
         fs = friends[u]
         if fs:
-            conn = np.mean([jaccard(tags[u], tags[f]) + jaccard(follow[u], follow[f]) for f in fs])
+            conn = np.mean([jaccard(tags[u], tags[f]) + jaccard(follow[u], follow[f]) for f in sorted(fs)])
             power = friend_power_of(u, fs, t_ref[u], by_target, by_pair)
         else:
             conn = power = np.nan

@@ -82,7 +82,7 @@ def node_blocks(G, tweets, users, net, t_ref, tags):
     for i in users.index:
         t = t_ref[i].timestamp()
         high, low = [], []
-        for j in friends[i]:
+        for j in sorted(friends[i]):                 # fixed order: float sums reproducible across runs
             n = int(np.searchsorted(by_target.get(j, np.empty(0)), t, side="left"))
             n_self = int(np.searchsorted(by_pair.get((j, i), np.empty(0)), t, side="left"))
             co = ft.jaccard(tags[i], tags[j]) + ft.jaccard(follow[i], follow[j])
@@ -129,7 +129,7 @@ def build_blocks(key, lex):
                   "no_high_friends_pct": 100 * (1 - b["has_high_friends"].mean()),
                   "lnode_inf_near_zero_pct": 100 * near_zero_share(b["lnode_inf"]),
                   "no_low_friends_pct": 100 * (1 - b["has_low_friends"].mean())}
-    edges = pd.DataFrame([(i, j) for i in users.index for j in friends[i]], columns=["user_id", "friend_id"])
+    edges = pd.DataFrame([(i, j) for i in users.index for j in sorted(friends[i])], columns=["user_id", "friend_id"])
     return b, degeneracy, edges
 
 
