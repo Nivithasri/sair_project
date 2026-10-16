@@ -68,3 +68,17 @@ Extracted (`pheme-rnr-dataset/`): `README`, `germanwings-crash/{rumours (238), n
 `sydneysiege/{rumours (522), non-rumours (699)}`. Each `<thread_id>/` has only `source-tweet/` and `reactions/`.
 
 **Not extracted:** charliehebdo, ferguson, ottawashooting.
+
+## 4. `nrc_emotion_lexicon/` — NRC Word-Emotion Association Lexicon (EmoLex) v0.92
+- URL: https://saifmohammad.com/WebDocs/Lexicons/NRC-Emotion-Lexicon.zip (official page: https://saifmohammad.com/WebPages/NRC-Emotion-Lexicon.htm)
+- Downloaded 2026-10-16. Archive `NRC-Emotion-Lexicon.zip`, 25,878,449 B, MD5 `396b4706943a160894237913b025c171`
+- **Licence / terms of use (from its README):** free for **non-commercial research and educational** use. You must cite
+  the papers below and keep NRC's copyright notices. You may not rent, license or redistribute it to third parties.
+  Commercial use needs a licence from NRC (saif.mohammad@nrc-cnrc.gc.ca). Because of this, the lexicon is git-ignored and not redistributed.
+- Cite: Mohammad SM, Turney PD (2013). *Crowdsourcing a Word-Emotion Association Lexicon.* Computational Intelligence 29(3): 436–465.
+  Mohammad SM, Turney PD (2010). *Emotions Evoked by Common Words and Phrases.* NAACL-HLT Workshop on Computational
+  Approaches to Analysis and Generation of Emotion in Text.
+
+Extracted: `NRC-Emotion-Lexicon/NRC-Emotion-Lexicon-Wordlevel-v0.92.txt` (word, emotion, 0/1; 14,154 words × 10
+categories, of which we use the 8 emotions) and `NRC-Emotion-Lexicon/README.txt`.
+**Not extracted:** the sense-level and other-language lexicons, and the PDFs.

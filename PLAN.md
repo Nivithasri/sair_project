@@ -33,12 +33,14 @@ results/                      plots + tables
 **Check:** no TRUE stories; S+A+I+R = N every bin; C_I, C_A non-decreasing and saturated (last 10% of bins add < 5%); I prevalence drops ≤ 50% in one bin; retweets of neutral sources never I/A; chosen events pass the event rule.
 
 ## Phase 2 — User features  (`src/features.py`)  — docs/SAIR_paper.md §2
-1. Emotion vectors (NRC, 8 dims, recency-weighted) → emotional similarity (cosine).
-2. Tags: user = top keywords/hashtags of own tweets; rumour = keywords of rumour text.
-3. Content fit (Jaccard). 4. Popularity Pop(t) = 0.5^((t−t0)/w).
-5. Connectivity (tag sim + friend-list Jaccard; friends = in-dataset follows). 6. Friend power (avg engagement of friends).
+Only the user's OWN posts before t_ref + profile description (no retweeted text).
+1. Emotion vectors (NRC, 8 dims, recency-weighted) → emotional similarity (cosine) with supporting sources.
+2. Tags: TF-IDF top keywords + hashtags of own text; rumour = same from supporting source tweets.
+3. Content fit (Jaccard). 4. Popularity Pop(t) = Σ_s w_s·0.5^((t−t0_s)/w), one term per story, w_s = author followers.
+5. Connectivity (tag Jaccard + friend-list Jaccard over follow friends). 6. Friend power (log1p mean engagement of friends, μ = 0.5).
 
-**Output:** feature columns in users table. **Check:** ranges valid, no NaN.
+**Output:** `data/processed/features_<set>.csv`, `pop_<set>.csv`; `results/phase2_*.csv`, `pop_vs_entries_charliehebdo.png`.
+**Check:** ranges valid, no NaN; coverage report; leakage check (single-feature AUC ≤ 0.95, class balance); Pop waves vs entries plot.
 
 ## Phase 3 — Network structure  (`src/network.py`)  — docs/SAIR_paper.md §3
 1. PageRank → top-k core. 2. Layers: strong = linked to core, weak = rest.

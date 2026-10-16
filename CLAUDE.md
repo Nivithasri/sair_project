@@ -19,7 +19,10 @@ Centrality-Targeted Hybrid Control of Rumour–Correction Competition on Social 
 - State labels from stance: supports rumour → **I**, denies rumour → **A**, no post yet → **S**. Display prevalence uses an exponential lifespan (mean 12 h) for I/A → R (D19).
 - **Fitting target = cumulative entry curves C_I(t), C_A(t)**, trimmed at 99% + 12 h (D14, D22). Compare shape and timing, not absolute peak height (N = posting users only). A user's I/A side is fixed by their **first** support/deny post (no I↔A transition). Query/comment-only users stay S.
 - Graph: directed, **follow edges (who-follows-whom) + reply/retweet interaction edges**, each edge has attribute `kind` ∈ {follow, interaction}. Edge u→v = u receives information from v.
-- Emotion: NRC emotion lexicon, **8 dimensions**; recency weight `exp(-lam*(t_now - t_j))`.
+- Emotion: NRC emotion lexicon, **8 dimensions**; recency weight `exp(-lam*(t_ref - t_j))`, lam = ln2/12 per h.
+- **No leakage:** user features use only the user's OWN posts written before t_ref (entry time, or event end for S users) + profile description; never retweeted text (DECISIONS D27). Check single-feature AUC ≤ 0.95.
+- Popularity: Pop(t) = Σ_s w_s·0.5^((t−t0_s)/w), one term per kept story, w_s = source-author follower count, normalised max 1; half-life w free in Phase 5 (D26).
+- Friend power: mean over friends of (replies + retweets + μ·favourites) per own post, μ = 0.5, log1p.
 - Content fit, group preference: Jaccard on tag/keyword sets.
 - Connectivity: tag similarity + **Jaccard of friend lists** (normalised, not raw mutual-friend count). Friend lists = follows **inside the dataset** (full Twitter friend lists are not available).
 - Group preference (Gpre): keywords from the group's posts **inside the event window** (no pre-event posts exist).

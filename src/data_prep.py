@@ -91,6 +91,7 @@ def tweet_row(t, thread_id, kind):
         "statuses_count": u["statuses_count"],
         "verified": u["verified"],
         "user_created_at": u["created_at"],
+        "user_description": u.get("description") or "",
     }
 
 
@@ -187,6 +188,7 @@ def build_users(tweets):
         "statuses_count": last["statuses_count"],
         "verified": last["verified"],
         "user_created_at": last["user_created_at"],
+        "description": last["user_description"].fillna(""),
     })
     users["reposted_rumour"] = (t[(t["kind"] == "retweet") & (t["stance"] == "support")]
                                 .groupby("user_id").size().reindex(users.index).notna().astype(int))
@@ -522,6 +524,9 @@ def prepare_story(annotations):
     tweets = tweets_all[tweets_all["story"] == STORY["story"]].reset_index(drop=True)
     assert set(tweets["story_veracity"]) <= KEEP_VERACITY, "robustness story must be false/unverified"
     users = build_users(tweets)
+    G = build_graph(STORY["event"], tweets, users)
+    with open(os.path.join(PROCESSED, f"graph_{STORY['key']}.gpickle"), "wb") as f:
+        pickle.dump(G, f)
     tweets.to_csv(os.path.join(PROCESSED, f"tweets_{STORY['key']}.csv"), index=False)
     users.to_csv(os.path.join(PROCESSED, f"users_{STORY['key']}.csv"))
     curves = save_set(STORY["key"], f"Ottawa story \"{STORY['story']}\"", tweets, users, STORY["bin_minutes"])
@@ -617,13 +622,12 @@ def check():
             assert TRIM_LEVEL * total <= curves[c].iloc[-1] <= total, f"{key}: {c} lost more than 1% to trimming"
             cut[s] = total - int(curves[c].iloc[-1])
 
-        # graph (events only)
-        if key in EVENTS:
-            with open(os.path.join(PROCESSED, f"graph_{key}.gpickle"), "rb") as f:
-                G = pickle.load(f)
-            assert set(G.nodes) == set(users.index), "graph nodes != users"
-            assert set(nx.get_edge_attributes(G, "kind").values()) <= {"follow", "interaction"}
-            assert G.number_of_edges() == len(nx.get_edge_attributes(G, "kind"))
+        # graph
+        with open(os.path.join(PROCESSED, f"graph_{key}.gpickle"), "rb") as f:
+            G = pickle.load(f)
+        assert set(G.nodes) == set(users.index), "graph nodes != users"
+        assert set(nx.get_edge_attributes(G, "kind").values()) <= {"follow", "interaction"}
+        assert G.number_of_edges() == len(nx.get_edge_attributes(G, "kind"))
 
         print(f"{key:22s} OK  N={N:,}  bins={len(curves)}  max|sum frac - 1|={np.abs(frac_sum - 1).max():.1e}  "
               f"max 1-bin I drop={drop:.1%}  tail C_I={saturation_tail(curves['C_I']):.2%}  "
