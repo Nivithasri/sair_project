@@ -36,8 +36,8 @@ results/                      plots + tables
 Only the user's OWN posts before t_ref + profile description (no retweeted text).
 1. Emotion vectors (NRC, 8 dims, recency-weighted) → emotional similarity (cosine) with supporting sources.
 2. Tags: TF-IDF top keywords + hashtags of own text; rumour = same from supporting source tweets.
-3. Content fit (Jaccard). 4. Popularity Pop(t) = Σ_s w_s·0.5^((t−t0_s)/w), one term per story, w_s = author followers.
-5. Connectivity (tag Jaccard + friend-list Jaccard over follow friends). 6. Friend power (log1p mean engagement of friends, μ = 0.5).
+3. Content fit (Jaccard). 4. Popularity Pop(t) = Σ_s w_s·0.5^((t−t0_s)/w), one term per story, w_s = log(1 + author followers).
+5. Connectivity (tag Jaccard + friend-list Jaccard over follow friends). 6. Friend power (log1p mean of timestamped replies + retweets friends received before entry, excluding the user's own).
 
 **Output:** `data/processed/features_<set>.csv`, `pop_<set>.csv`; `results/phase2_*.csv`, `pop_vs_entries_charliehebdo.png`.
 **Check:** ranges valid, no NaN; coverage report; leakage check (single-feature AUC ≤ 0.95, class balance); Pop waves vs entries plot.

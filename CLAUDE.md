@@ -21,8 +21,9 @@ Centrality-Targeted Hybrid Control of Rumour–Correction Competition on Social 
 - Graph: directed, **follow edges (who-follows-whom) + reply/retweet interaction edges**, each edge has attribute `kind` ∈ {follow, interaction}. Edge u→v = u receives information from v.
 - Emotion: NRC emotion lexicon, **8 dimensions**; recency weight `exp(-lam*(t_ref - t_j))`, lam = ln2/12 per h.
 - **No leakage:** user features use only the user's OWN posts written before t_ref (entry time, or event end for S users) + profile description; never retweeted text (DECISIONS D27). Check single-feature AUC ≤ 0.95.
-- Popularity: Pop(t) = Σ_s w_s·0.5^((t−t0_s)/w), one term per kept story, w_s = source-author follower count, normalised max 1; half-life w free in Phase 5 (D26).
-- Friend power: mean over friends of (replies + retweets + μ·favourites) per own post, μ = 0.5, log1p.
+- Popularity: Pop(t) = Σ_s w_s·0.5^((t−t0_s)/w), one term per kept story, w_s = log(1 + source-author followers), normalised max 1; half-life w free in Phase 5 (D26).
+- Friend power: log1p of the mean over friends of timestamped replies + retweets RECEIVED before the user's t_ref, excluding the user's own; no favourites (D29).
+- S_emo: users with no emotion words → has_emotion = 0, filled with the event mean (cosine undefined).
 - Content fit, group preference: Jaccard on tag/keyword sets.
 - Connectivity: tag similarity + **Jaccard of friend lists** (normalised, not raw mutual-friend count). Friend lists = follows **inside the dataset** (full Twitter friend lists are not available).
 - Group preference (Gpre): keywords from the group's posts **inside the event window** (no pre-event posts exist).
