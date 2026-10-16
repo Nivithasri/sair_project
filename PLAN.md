@@ -61,12 +61,15 @@ Only the user's OWN posts before t_ref + profile description (no retweeted text)
 **Check:** Drif1 + Drif2 = 1; Mult_eff in [0, κ]; no NaN; degeneracy table; coefficients; CV AUCs ≤ 0.95 (flag gap > 0.10); worked example 0.769.
 
 ## Phase 5 — SAIR simulation & validation  (`src/sair.py`)  — docs/SAIR_paper.md §5
-1. δ1(t), δ2(t) = mean pushes over susceptible users, recomputed each hour.
-2. Euler loop of the corrected SAIR equations.
-3. Fit free params (half-life w, scale) to the real **cumulative** curves C_I, C_A (model: cumulative inflow ∫δ1·I·S, ∫δ2·A·S) with scipy.optimize.minimize.
-4. RMSE (predicted vs real C_I and C_A); compare shape/timing, not absolute peak height.
+1. Corrected SAIR, fractions of N, Euler dt = 0.1 h (converged vs 0.05 h); unit test = docs worked step.
+2. δ1(t) = mean Drif1 over users not yet entered in the data; P1 from data friend counts re-weighted by
+   ρ = C_model/C_data (clip [0, 5]); Mult_eff with Pop(t) at the current t; recomputed every data bin (1 h).
+3. Source injection: θ·w_s/Σw moves S → I / A at each supporting / denying source tweet (w_s = log(1 + followers)).
+4. Fit w (0.5–48 h), κ (0.1–10), θ (0–0.5): Nelder-Mead, 10 random starts (seed 42), loss = mean RMSE of C_I/C_I,final and C_A/C_A,final.
+5. Baselines with the same loss and injection: (a) constant-rate SAIR (Eq. 22), (b) uniform Mult_eff = κ; robustness: full model with follow-Louvain groups.
 
-**Output:** Plot 1 (S/A/I/R curves), Plot 2 (predicted vs real + RMSE). **Check:** sum = 1 each step.
+**Output:** `results/phase5_params.csv` (reused by Phases 6–8), Plot 1 (states), Plot 2 (cumulative fit, 3 models), Plot 2b (prevalence vs display).
+**Check:** sum = 1 each step (±1e-9), states and δ in [0, 1]; dt-convergence < 1e-3; unit test; ≥ 1 converged start per set; honest full-vs-baseline comparison.
 
 ## Phase 6 — Ablation  (`src/sair.py`)  — docs/SAIR_paper.md §6
 Re-run with emotion removed (S_emo=1) and popularity removed (Pop=1); optional others.

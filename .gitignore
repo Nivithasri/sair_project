@@ -11,6 +11,7 @@ data/processed/network_*.csv
 data/processed/groups_*.csv
 data/processed/drive_*.csv
 data/processed/friends_*.csv
+data/processed/model_curves_*.csv
 
 __pycache__/
 *.pyc
