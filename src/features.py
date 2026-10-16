@@ -267,12 +267,22 @@ def popularity(tweets, users, t_hours, half_life_h=POP_HALF_LIFE_H):
     start = ((first_src["created_at"] - t0) / pd.Timedelta(hours=1)).to_numpy()
     followers = first_src["followers_count"].astype(float).to_numpy()
     weight = np.log1p(followers)
-    t = np.asarray(t_hours, dtype=float)[:, None]
-    terms = np.where(t >= start, weight * 0.5 ** ((t - start) / half_life_h), 0.0)
-    pop = terms.sum(axis=1)
+    pop = pop_raw(start, weight, t_hours, half_life_h)
     stories = pd.DataFrame({"story": first_src["story"].to_numpy(), "t0_h": start, "followers": followers,
                             "weight": weight})
     return pop / pop.max(), stories
+
+
+def pop_raw(start, weight, t_hours, half_life_h=POP_HALF_LIFE_H):
+    """Unnormalised sum of story terms w_s * 0.5^((t - t0_s)/w) for t >= t0_s, at times t_hours."""
+    t = np.asarray(t_hours, dtype=float)[:, None]
+    return np.where(t >= start, weight * 0.5 ** ((t - start) / half_life_h), 0.0).sum(axis=1)
+
+
+def pop_at(stories, t_hours, grid_hours, half_life_h=POP_HALF_LIFE_H):
+    """Pop at arbitrary times, normalised by the maximum over the event's time grid (as in pop_<set>.csv)."""
+    start, weight = stories["t0_h"].to_numpy(), stories["weight"].to_numpy()
+    return pop_raw(start, weight, t_hours, half_life_h) / pop_raw(start, weight, grid_hours, half_life_h).max()
 
 
 def wave_table(stories, pop_df, gap_h=6):

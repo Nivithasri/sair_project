@@ -53,11 +53,12 @@ Only the user's OWN posts before t_ref + profile description (no retweeted text)
 **Check:** core small, layers sum to N; one group per user (count, sizes, silhouette / modularity); NMI(group, first thread) < 0.3; r in [0.05, 0.95]; leakage AUC ≤ 0.95.
 
 ## Phase 4 — Influence & push  (`src/drive.py`)  — docs/SAIR_paper.md §4
-1. Blocks: User_att, hnode_inf (low r), lnode_inf (high r), Group_att.
-2. Regression (target = reposted rumour 1/0) → γ0..γ4 → Mult_eff.
-3. P1 per user from friends' states. 4. Drif1, Drif2.
+1. Blocks from pre-entry info: User_att = S_emo·Info_match·Pop(t_ref), hnode_inf / lnode_inf (friends in same-or-higher / lower layer: co·fp·(1−r)), Group_att = Gact_norm·Gpre; 90% degeneracy fallbacks.
+2. Logistic regression on sided users (y = first side I), standardised blocks, class_weight balanced → γ0..γ4; CV AUC stratified + thread-held-out.
+3. Mult_eff = κ·minmax(η), κ = 2. P1 per user from friends who took a side (fallback global share). 4. Drif1, Drif2; `drif(ctx, t)` for Phase 5.
 
-**Output:** mult_eff, drif1, drif2 per user. **Check:** coefficients printed; Drif1+Drif2 = 1.
+**Output:** `data/processed/drive_<set>.csv`, `drive_model_<set>.json`, `friends_<set>.csv`; `results/phase4_*.csv`, Drif plots.
+**Check:** Drif1 + Drif2 = 1; Mult_eff in [0, κ]; no NaN; degeneracy table; coefficients; CV AUCs ≤ 0.95 (flag gap > 0.10); worked example 0.769.
 
 ## Phase 5 — SAIR simulation & validation  (`src/sair.py`)  — docs/SAIR_paper.md §5
 1. δ1(t), δ2(t) = mean pushes over susceptible users, recomputed each hour.

@@ -33,6 +33,7 @@ Centrality-Targeted Hybrid Control of Rumour–Correction Competition on Social 
 - Rename the paper's group-activity weight γ → `w_part` (γ clashes with a removal rate).
 - Regression target for Mult_eff = **user reposted the rumour (1/0)**.
 - `Drif1 = sigmoid((2*P1 - 1) * Mult_eff)`, `Drif2 = 1 - Drif1`.
+- Phase 4: regression sample = sided users (I ∪ A), logistic, class_weight balanced, standardised blocks; Mult_eff = κ·minmax(η) ∈ [0, κ], κ = 2 (fitted in Phase 5); P1 = friends who have taken side I / those who took any side, fallback = global share; 90% degeneracy rule for User_att / Group_att (D39–D43).
 - `delta1(t) = mean Drif1 over susceptible users`, `delta2(t) = mean Drif2` (Eq. 24's binomial reduces to this). Recompute every step.
 - **Corrected SAIR (paper's Eq. 26 swaps δ1/δ2):**
   - dS = −δ1·I·S − δ2·A·S

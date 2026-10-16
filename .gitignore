@@ -9,6 +9,8 @@ data/processed/users_*.csv
 data/processed/features_*.csv
 data/processed/network_*.csv
 data/processed/groups_*.csv
+data/processed/drive_*.csv
+data/processed/friends_*.csv
 
 __pycache__/
 *.pyc
