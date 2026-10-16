@@ -25,6 +25,10 @@ dR/dt = (1 − δ1)·I + (1 − δ2)·A
 ```
 Invariant: S + I + A + B + R = 1.
 
+**Phase 7 uses the SAIR-H rates** (Phase 5 model (d), `docs/SAIR_paper.md` §5, DECISIONS D50): the contact terms become
+β·δ1·I·S and α·δ2·A·S, and the removals become γ·I and ε·A. The u and v terms are unchanged. The worked step below
+keeps the Eq. 26 form as a hand-checkable example.
+
 **Cost (form borrowed from DR-DB paper)**
 J = Σ_t [ A1·I(t) + ½·c1·u² + ½·c2·v² ] Δt,  with A1 = 1, c1 = c2 = 2.
 Squared costs: heavy intervention gets disproportionately expensive → forces a balanced strategy.

@@ -1,7 +1,7 @@
 # Session handoff — read this first
 
-Last updated: 2026-10-16 (end of session 1). Current commit before this handoff: `cee4567`.
-Companion files: `CLAUDE.md` (rules + fixed decisions), `PLAN.md` (phases), `DECISIONS.md` (D1–D49, every
+Last updated: 2026-10-16 (session 2: Phase 5 revision done). Previous handoff commit: `8128a85`.
+Companion files: `CLAUDE.md` (rules + fixed decisions), `PLAN.md` (phases), `DECISIONS.md` (D1–D56, every
 choice and deviation with numbers), `data/raw/README.md` (data provenance and licences).
 
 ---
@@ -57,7 +57,7 @@ the source stance; the **first** support/deny post fixes I or A (no switching); 
 | 2 Features | `src/features.py` | **done** | `364c879`, `7f808be`, `04e64ab` |
 | 3 Network | `src/network.py` | **done** | `6f5ec07`, `b668911`, `8b15077` |
 | 4 Drive | `src/drive.py` | **done** | `27e749c`, `04e64ab`, `8b15077` |
-| 5 SAIR fit | `src/sair.py` | **first version done — being REVISED (next task)** | `cee4567` |
+| 5 SAIR fit | `src/sair.py` | **done (revised: models a–e, AIC/BIC, forecast, recovery, bootstrap)** | `cee4567`, revision commit after `8128a85` |
 | 6 Ablation | — | not started | — |
 | 7 SAIR-C | — | not started | — |
 | 8 Targeting | — | not started | — |
@@ -125,25 +125,31 @@ they were up to 0.741 (SS Gpre), which was the leak that motivated the switch.
   CH 0.428 (12 threads, 2,284 users), SS 0.491 (14, 2,069), story 0.427 (2, 707).**
 - Mult_eff = κ × percentile rank of η (mean ≈ 1.0 at κ = 2). Worked example: Mult_eff 2, P1 0.8 → Drif1 0.7685.
 
-### Phase 5 — first version (to be revised)
-Loss = mean of RMSE(C_I/C_I,final) and RMSE(C_A/C_A,final). Euler dt = 0.02 h (D47). Source injection θ (D46).
-| Set | Model | RMSE_I | RMSE_A | Mean | Fitted parameters |
-|---|---|---|---|---|---|
-| CH | (a) constant-rate SAIR | 0.054 | 0.058 | **0.056** | α 0.068, β 0.101, ε 0.010, γ 0.047, θ 0.270 |
-| CH | (b) uniform Mult_eff | 0.103 | 0.179 | 0.141 | κ 0.1 (bound), θ 0.389 |
-| CH | (c) full | 0.094 | 0.174 | 0.134 | w 48 (bound), κ 0.1 (bound), θ 0.382 |
-| CH | (c) follow groups | 0.094 | 0.174 | 0.134 | w 6.3, κ 0.1, θ 0.385 |
-| SS | (a) | 0.028 | 0.117 | **0.073** | α 1.0 (bound), β 0.245, ε 0.300, γ 0.149, θ 0.5 |
-| SS | (b) | 0.056 | 0.267 | 0.161 | κ 0.1, θ 0.5 |
-| SS | (c) | 0.064 | 0.255 | 0.160 | w 48, κ 0.1, θ 0.5 |
-| SS | (c) follow groups | 0.065 | 0.255 | 0.160 | w 32.6, κ 0.1, θ 0.5 |
-| story | (a) | 0.046 | 0.034 | **0.040** | α 1.0, β 0.963, ε 0.267, γ 0.309, θ 0.5 |
-| story | (b) | 0.071 | 0.282 | 0.177 | κ 0.996, θ 0.5 |
-| story | (c) | 0.065 | 0.288 | 0.176 | w 0.5 (bound), κ 3.90, θ 0.5 |
-| story | (c) follow groups | 0.067 | 0.285 | 0.176 | w 0.5, κ 3.25, θ 0.5 |
-
-**The full model does not beat (a) on any set; it beats (b) only by 0.001–0.007.** Checks pass (sum = 1 to 5e-15,
-dt-convergence ≤ 5.7e-4 for all models, 10/10 converged starts for (c)). The CH constant-rate best start hit maxfev (3/10 converged).
+### Phase 5 — revised (D50–D56)
+Least squares on C_I/final and C_A/final; same bounds for all models (rates [1e-3, 5], w [0.5, 168], κ [0, 10],
+θ [0, 1]); 20 starts; dt = bin/50. Converged starts 20/20 everywhere except story (e) 19/20 (flat w at κ = 0).
+| Set | Model | k | Mean RMSE | AIC | ΔAIC vs best | Forecast RMSE (held-out) | Bound flags |
+|---|---|---|---|---|---|---|---|
+| CH | (a) constant-rate | 5 | 0.0555 | −1563.0 | 9.3 | 0.359 | — |
+| CH | (c) Eq. 26 | 3 | 0.1341 | −1064.8 | 507.5 | — | w high |
+| CH | **(d) SAIR-H** | 7 | 0.0551 | −1562.7 | 9.6 | 0.359 (fit → κ = 0) | κ high, w high |
+| CH | (d)-uniform | 6 | 0.0543 | **−1572.3** | 0 | — | — |
+| CH | (e) mean-field | 7 | 0.0555 | −1559.0 | 13.3 | — | κ low (= a) |
+| SS | (a) | 5 | 0.0689 | **−460.2** | 0 | 0.495 | — |
+| SS | (d) | 7 | 0.0690 | −456.2 | 4.0 | 0.495 | α high |
+| SS | (d)-uniform / (e) | 6 / 7 | 0.0690 / 0.0689 | −458.3 / −456.2 | 1.9 / 4.0 | — | α high / κ low |
+| story | (a) | 5 | 0.0210 | **−1856.2** | 0 | 0.608 | α high |
+| story | (d) | 7 | 0.0259 | −1770.5 | 85.6 | 0.637 | α high, κ low |
+(b) Eq. 26 uniform ≈ (c) everywhere. Full table: `results/phase5_model_comparison.csv`.
+- **(i)** (d) does not beat (a) on AIC in any set; forecasts tie (CH, SS) or (a) wins (story).
+- **(ii)** (d) vs (e): (d) is better only in CH, by 3.7, because (e) collapses to κ = 0. The friend network adds little.
+- **(iii)** (d)-uniform beats (d): the regression ranking adds nothing.
+- **Story sensitivity (D55):** the specified α ≤ 5 binds (a), and nesting needs (d)'s α = 10. With rate bounds of 50,
+  **(d) beats (a) on the story by 21.3 AIC** (κ 3.0). Open question: widen the bounds?
+- **Recovery (D56):** 2 of 5 seeds recover the CH (d) truth; 3 of 5 fall into the constant-rate mode (κ ≈ 0) with the same
+  fit. κ, w and α are not identifiable; γ, ε and θ are (median error ≤ 8%).
+- **Bootstrap (D52, D56):** CH (d) κ [3.9, 10], w [8.9, 168]; SS κ [0, 10]. These CIs are too narrow (i.i.d. residuals, warm start).
+- All models miss SS's early A entries (0–12 h, 25% of C_A) because A = 0 is absorbing until the first denying source.
 
 ---
 
@@ -160,9 +166,14 @@ dt-convergence ≤ 5.7e-4 for all models, 10/10 converged starts for (c)). The C
     thread-held-out AUC below chance for CH (0.31) and the story (0.09).
 
 (d) **Structural result (D49).** In Eq. 26 with δ2 = 1 − δ1: I grows only if δ1 > 1/(1 + S) ≥ 0.5; A grows only if
-    δ1 < 1/(1 + S) ≤ 0.5. **So I and A can never both grow at once.** In the fitted full model δ1 ≈ 0.51; endogenous
+    δ1 < S/(1 + S) ≤ 0.5. **So I and A can never both grow at once.** In the fitted full model δ1 ≈ 0.51; endogenous
     growth of I is possible 0.5–1.7% of the time and of A 0%. The model reduces to injection + decay, so RMSE_A is
     large. The constant-rate model has four independent rates and wins.
+    (Correction in session 2: the A bound is δ1 < S/(1 + S) ≤ 1/2. The paper's Fig. 9 discussion and our data both show early co-growth.)
+
+(f) **SAIR-H (d) does not beat constant-rate SAIR (a)** on AIC or forecast in any set under the specified bounds (D54).
+    The data-driven drives are not identifiable from cumulative curves (D56), and uniform Mult_eff beats the regression
+    ranking. On the story, with non-binding bounds, (d) does win (D55). Phase 8 must add a Barabási–Albert network.
 
 (e) **The follow graph was collected per thread (D38).** who-follows-whom only lists follows among each thread's
     participants. Louvain groups on it reconstructed threads (NMI 0.71); PageRank, friends and P1 still use it.
@@ -191,33 +202,12 @@ dt-convergence ≤ 5.7e-4 for all models, 10/10 converged starts for (c)). The C
 
 ---
 
-## 6. NEXT TASK — Phase 5 revision
+## 6. NEXT TASK — Phase 6 (ablation), after the user approves Phase 5
 
-Revise `src/sair.py` (Phase 5) before Phase 6. Models, all with the same loss, cumulative target, injection (D46),
-Euler dt = 0.02 h and multi-start Nelder-Mead:
-- (a) constant-rate SAIR (Eq. 22) — exists
-- (b) uniform Mult_eff — exists
-- (c) full corrected SAIR with data-driven δ (D45) — exists
-- **(d) SAIR-H** — new
-- **(e) mean-field** — new
-
-> **The exact equations of (d) SAIR-H and (e) mean-field were NOT specified in session 1.** Take them from the
-> user's Phase 5 revision prompt. Do not invent them. If they are not given, ask before coding.
-
-Required evaluation (user spec). The protocol details marked *(suggested)* are not yet agreed; confirm or replace them with the user's spec:
-1. **AIC / BIC** per set and model. *(suggested)* Gaussian form on the fitted loss residuals:
-   AIC = n·ln(SSE/n) + 2k, BIC = n·ln(SSE/n) + k·ln n, with n = number of fitted points (C_I and C_A bins) and k = free parameters incl. θ.
-2. **Parameter recovery test.** *(suggested)* Simulate synthetic curves from the fitted parameters (± noise), refit
-   from random starts, and report the recovered vs true parameters (bias and relative error); flag non-identifiable parameters.
-3. **Bootstrap confidence intervals.** *(suggested)* Residual or block bootstrap of the curves (e.g. 200 replicates,
-   seed 42), refit, 95% percentile CIs per parameter and for RMSE / AIC.
-4. **Forecast test.** *(suggested)* Fit on an early window (e.g. up to the 50% point of C_I, or the first wave)
-   and score out-of-sample RMSE on the rest, per model.
-
-**Decision rule (fixed): if (d) does not beat (a) on AIC, Phase 8 must also run on a synthetic
-Barabási–Albert network** (in addition to PHEME). Phases 6–8 use **model (d)** with its fitted parameters.
-
-Honesty rules apply (CLAUDE.md "Working principles"): do not tune the setup to make (d) win; report the AIC table as it comes out.
+Phase 5 is done (D50–D56). Phases 6–8 use **model (d) SAIR-H**: `results/phase5_params.csv`, row `model == "sairh"`,
+via `sair.simulate(sc, "sairh", params)`. Phase 6 = emotion off (S_emo = 1) and popularity off (Pop = 1) in Mult_eff
+(PLAN.md). Expect small effects: in CH κ sits at its bound with w = 168 h (Pop nearly flat), and κ = 0 on the story,
+where the ablation does nothing. Report this, do not tune. Phase 8 must include the BA network (decision rule fired).
 
 ---
 
@@ -232,14 +222,14 @@ Set `LOKY_MAX_CPU_COUNT=4` to silence a harmless joblib warning on Windows (`[Wi
 | 2 | `python src/features.py --check` | ~15 s | `data/processed/{features,pop}_<set>.csv`, `results/phase2_*`, `pop_*`, `pop_vs_entries_charliehebdo.png` |
 | 3 | `python src/network.py --check` | ~30 s | `data/processed/{network,groups,groups_follow}_<set>.csv`, `results/phase3_*` |
 | 4 | `python src/drive.py --check` | ~30 s | `data/processed/{drive,drive_model,friends}_<set>[_followgroups].*`, `results/phase4_*` |
-| 5 | `python src/sair.py --check` (refit) or `--check-only` (checks on saved params, ~7 s) | ~3 min (10 parallel starts) | `results/phase5_params.csv`, `phase5_plot1/2/2b_*.png`, `data/processed/model_curves_<set>.csv` |
+| 5 | `python src/sair.py --check` (refit all) · `--check --sets story_three_shootings` (refit some sets) · `--check-only` (checks only, ~2 min) | ~2 h on 12 cores (wave 1 fits 41 min, wave 2 recovery + bootstrap 46 min, story refit at dt 0.005 another 21 min) | `results/phase5_{params,model_comparison,forecast,recovery,bootstrap_ci}.csv`, `phase5_plot1/2/2b/2c_*.png`, `data/processed/model_curves_<set>.csv` (model d) |
 
 - `<set>` ∈ {charliehebdo, sydneysiege, story_three_shootings}.
 - The pipeline is deterministic (seed 42; two full runs gave byte-identical outputs).
 - Raw data must be present in `data/raw/` (see its README for URLs and MD5s).
 - Large files are git-ignored: graphs, tweets, users, features, network, groups, drive, friends, model_curves.
 - Phase 5 reuse: `drive.make_context(key, variant)` + `drive.drif(ctx, t, side_code)`;
-  `sair.set_context(key)`, `sair.simulate(sc, kind, params, dt, record)`, `sair.fit(sc, kind, pool)`.
+  `sair.get_context(key)`, `sair.simulate(sc, kind, params, record=True)` with kind in `sair.MODELS`; fitting via `sair.start_jobs` + `sair.run_jobs`.
 
 Each module runs its own phase check with `--check`. Every phase check must pass before a commit.
 
@@ -247,5 +237,7 @@ Each module runs its own phase check with `--check`. Every phase check must pass
 
 ## 8. Open decisions
 
-None, other than what the Phase 5 revision decides: the definitions of (d) and (e) (from the user), the
-AIC verdict of (d) vs (a), and therefore whether Phase 8 adds the BA network.
+1. **Rate bounds:** the specified [1e-3, 5] binds (a) and (d) on the story (and (d)'s α on SS). Widening to 50 flips the story
+   verdict to (d) (D55). Keep the bounds, or widen them and refit all sets?
+2. **BA network for Phase 8:** size N and m to be chosen (required by the decision rule).
+3. Phase 6 on the story is empty (κ = 0) under the current bounds.

@@ -130,6 +130,31 @@ dR/dt = (1 − δ1)·I + (1 − δ2)·A
 ```
 Rumour grows only when δ1·S > 1 − δ1.
 
+**Structural result: in Eq. 26 the rumour and the correction can never grow at the same time** (DECISIONS D49).
+With δ2 = 1 − δ1 and S ∈ [0, 1]:
+- I grows ⇔ δ1·S > 1 − δ1 ⇔ δ1·(1 + S) > 1 ⇔ **δ1 > 1/(1 + S)**
+- A grows ⇔ δ2·S > 1 − δ2 ⇔ (1 − δ1)·S > δ1 ⇔ **δ1 < S/(1 + S)**
+- S ≤ 1 gives S/(1 + S) ≤ 1/2 ≤ 1/(1 + S). Both would need 1/(1 + S) < δ1 < S/(1 + S), which is empty.
+
+One push δ1 sets both the contact rate and the removal rate of both sides, so whatever helps one side hurts the
+other. Real data shows the opposite early on. The paper's own Fig. 9 text says that in the early stage "the
+high-frequency dissemination of malicious information is accompanied by an increase in the spread of
+anti-malicious information" (a "cooperative relationship"). In our data the display I and A prevalences rise
+together in the first bins of every set: Ottawa story 0.25–1.5 h (C_I 1 → 381, C_A 0 → 239), Sydney 1–5 h,
+Charlie Hebdo 1–3 h, 26–27 h and 46–50 h. Eq. 26 cannot produce this. It is kept as model (c) for fidelity.
+
+**Our working model: SAIR-H (Phase 5 model (d), used in Phases 6–8, DECISIONS D50).** It uses Eq. 22's
+independent contact and removal rates, scaled by Eq. 26's data-driven pushes:
+```
+dS/dt = −β·δ1(t)·I·S − α·δ2(t)·A·S
+dI/dt =  β·δ1(t)·I·S − γ·I
+dA/dt =  α·δ2(t)·A·S − ε·A
+dR/dt =  γ·I + ε·A
+```
+I grows iff β·δ1·S > γ, and A grows iff α·δ2·S > ε. These are independent conditions, so co-growth is possible.
+With κ = 0, δ1 = δ2 = 1/2, so SAIR-H(β, α, γ, ε) = Eq. 22(β/2, α/2, γ, ε) exactly (nesting).
+Variants: (e) mean-field, where every user's P1 = the model's global I/(I + A); and SAIR-H with uniform Mult_eff = κ.
+
 Worked Euler step (Δt = 1): S=0.90, I=0.05, A=0.05, R=0, δ1=0.6, δ2=0.4 → S=0.855, I=0.057, A=0.038, R=0.050 (sum 1.000).
 
 **Algorithm 1 (paper):** PageRank layers + KNN groups → init S,A,I,R → per user: features, Prb/Gact/Gpre, regression, Drif1/Drif2 → mean-field ODE → output δ1(t), δ2(t), S,A,I,R. Complexity O(N).
