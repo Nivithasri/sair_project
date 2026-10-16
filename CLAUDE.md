@@ -1,3 +1,5 @@
+> **New session? Read `docs/HANDOFF.md` first.**
+
 # Project: Whom to Silence, Whom to Amplify
 Centrality-Targeted Hybrid Control of Rumour–Correction Competition on Social Networks
 
@@ -6,6 +8,17 @@ Centrality-Targeted Hybrid Control of Rumour–Correction Competition on Social 
 - **Our extension:** SAIR-C (blocking + correction-campaign knobs with a cost score) and centrality-targeted intervention — `docs/extension.md`.
 - **Borrowed idea only (do NOT implement this paper):** DR-DB rumor control, Zhong et al., JSSC 2026 — `docs/DRDB_reference.md`.
 - **Phase plan:** `PLAN.md`. **Assumptions log:** `DECISIONS.md`.
+
+## Working principles
+- **Strict honesty.** Report what the data and models actually show, including negative results and failed checks.
+- **Never relax the leakage rules to match the paper** (own pre-entry text only, timestamped friend power,
+  profile-only groups, follow-only PageRank, single-feature AUC ≤ 0.95; see HANDOFF §5).
+- **Never tune the setup to force a model to win.** Same loss, data, injection and optimiser for every compared model.
+- **Report negative results** prominently (e.g. D49: the full model loses to constant-rate SAIR).
+- **Every deviation from the paper or the plan is logged in `DECISIONS.md`** with the reason and the numbers.
+- **One phase at a time, then stop** for approval.
+- **Detailed final report per phase** (steps, files, check output, tables, observations, problems and fixes,
+  decisions, open questions).
 
 ## How to work
 - Work **ONE phase at a time** from `PLAN.md`. Never start the next phase without my approval.
@@ -28,10 +41,10 @@ Centrality-Targeted Hybrid Control of Rumour–Correction Competition on Social 
 - S_emo: users with no emotion words → has_emotion = 0, filled with the event mean (cosine undefined).
 - Content fit, group preference: Jaccard on tag/keyword sets.
 - Connectivity: tag similarity + **Jaccard of friend lists** (normalised, not raw mutual-friend count). Friend lists = follows **inside the dataset** (full Twitter friend lists are not available).
-- Group preference (Gpre): keywords from the group's posts **inside the event window** (no pre-event posts exist).
+- Group preference (Gpre): keywords from group members' OWN pre-entry text + profile descriptions (D36; no pre-event posts exist).
 - Drop the undefined "Initiative" variable from Algorithm 1.
 - Rename the paper's group-activity weight γ → `w_part` (γ clashes with a removal rate).
-- Regression target for Mult_eff = **user reposted the rumour (1/0)**.
+- Regression target for Mult_eff = **first side is I (1) vs A (0)**, on users who took a side (D39).
 - `Drif1 = sigmoid((2*P1 - 1) * Mult_eff)`, `Drif2 = 1 - Drif1`.
 - Phase 4: regression sample = sided users (I ∪ A), logistic, class_weight balanced, standardised blocks; Mult_eff = κ·percentile_rank(η) ∈ [0, κ], κ = 2 (fitted in Phase 5); P1 = friends who have taken side I / those who took any side, fallback = global share; 90% degeneracy rule for User_att (judged on has_text & has_emotion users) / Group_att (D39–D44); lnode_inf kept but structurally empty.
 - `delta1(t) = mean Drif1 over users not yet entered in the data`, `delta2 = 1 - delta1` (Eq. 24's binomial reduces to this). P1 uses data friend counts re-weighted by ρ = C_model/C_data (clip [0, 5]) so interventions feed back; recomputed every data bin (1 h) (D45).
@@ -41,6 +54,7 @@ Centrality-Targeted Hybrid Control of Rumour–Correction Competition on Social 
   - dI = δ1·I·S − (1−δ1)·I
   - dA = δ2·A·S − (1−δ2)·A
   - dR = (1−δ1)·I + (1−δ2)·A
+- Phases 6–8 use Phase 5 **model (d)** (see the revised PLAN.md). If (d) does not beat (a) on AIC, Phase 8 also runs on a synthetic Barabási–Albert network.
 - SAIR-C adds B (blocked), knobs u (blocking) and v (correction campaign); cost weights A1=1, c1=c2=2.
 
 ## Coding rules
