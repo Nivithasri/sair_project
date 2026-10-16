@@ -46,11 +46,11 @@ Only the user's OWN posts before t_ref + profile description (no retweeted text)
 1. PageRank on follow edges only (u→v = u follows v) → core = top 1% (0.5% / 2% sensitivity).
 2. Layers: strong = follows a core node, weak = rest.
 3. mpr = τ(k1·pr_norm + k2·Info_match) (Eq. 17); r = 1 − mpr_norm clipped to [0.05, 0.95].
-4. Groups: Louvain on the undirected follow graph (no Prb from event retweets — outcome leakage).
+4. Groups: KMeans on profile-only features, k by silhouette, NMI(group, thread) < 0.3; follow-Louvain as robustness variant (no Prb from event retweets — outcome leakage).
 5. Gact = mean log1p(statuses_count); Gpre = Jaccard(group top-30 TF-IDF keywords of own pre-entry text + profiles, rumour tags); Group_att = Gact_norm × Gpre.
 
 **Output:** `data/processed/network_<set>.csv`, `groups_<set>.csv`; `results/phase3_*.csv`, layer and group-size plots.
-**Check:** core small, layers sum to N; one group per user (count, sizes, modularity); r in [0.05, 0.95]; leakage AUC ≤ 0.95.
+**Check:** core small, layers sum to N; one group per user (count, sizes, silhouette / modularity); NMI(group, first thread) < 0.3; r in [0.05, 0.95]; leakage AUC ≤ 0.95.
 
 ## Phase 4 — Influence & push  (`src/drive.py`)  — docs/SAIR_paper.md §4
 1. Blocks: User_att, hnode_inf (low r), lnode_inf (high r), Group_att.

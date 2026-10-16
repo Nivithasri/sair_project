@@ -4,7 +4,8 @@ For each set (Charlie Hebdo, Sydney Siege, Ottawa robustness story):
   PageRank on the follow graph (edge u -> v = u follows v, so followed accounts score high)
   core = top 1% by PageRank; strong layer = follows a core node; weak = everyone else
   mpr = tau * (k1 * pr_norm + k2 * Info_match)  (Eq. 17);  loss factor r = 1 - mpr_norm, clipped
-  groups = Louvain communities of the undirected follow graph (no retweet-based Prb: that is the outcome)
+  groups = KMeans on profile-only features (primary; no event behaviour, no follow graph), with
+           Louvain on the undirected follow graph kept as a robustness variant (DECISIONS D37)
   Gact = mean log1p(statuses_count) of members; Gpre = Jaccard(group TF-IDF keywords, rumour tags)
   Group_att = Gact_norm * Gpre
 
@@ -22,8 +23,11 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import pandas as pd
+from sklearn.cluster import KMeans
+from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import normalized_mutual_info_score, roc_auc_score, silhouette_score
+from sklearn.preprocessing import StandardScaler
 
 import data_prep as dp
 import features as ft
@@ -35,9 +39,14 @@ PAGERANK_ALPHA = 0.85
 TAU, K1, K2 = 1.0, 0.5, 0.5                  # Eq. 17 weights (DECISIONS D33)
 R_CLIP = (0.05, 0.95)
 TOP_K_GROUP = 30
+K_OPTIONS = [20, 50, 100]                    # KMeans k candidates, chosen by silhouette (D37)
+PROFILE_SVD_DIMS = 50
+SILHOUETTE_SAMPLE = 5000
+MAX_THREAD_NMI = 0.3
 LAYERS = ["core", "strong", "weak"]
 LAYER_CODE = {"weak": 0, "strong": 1, "core": 2}
-AUC_COLUMNS = ["pr_norm", "layer_code", "r", "Gact", "Gpre", "Group_att"]
+AUC_COLUMNS = ["pr_norm", "layer_code", "r", "Gact", "Gpre", "Group_att",
+               "Gact_follow", "Gpre_follow", "Group_att_follow"]
 
 
 # ---------------------------------------------------------------- layers
@@ -97,6 +106,42 @@ def louvain_groups(F):
     return pd.Series(group, name="group"), nx.community.modularity(U, comms)
 
 
+def profile_matrix(users, t0):
+    """Profile-only features (no event behaviour): TF-IDF of profile descriptions reduced by SVD, plus
+    standardised log1p of followers, friends, statuses and account age in days at the event start.
+    Both blocks are scaled to the same total variance (DECISIONS D37)."""
+    docs = [" ".join(ft.tokens(d)) for d in users["description"]]
+    tfidf = TfidfVectorizer(stop_words="english", token_pattern=r"(?u)\b[a-z][a-z']+\b", min_df=2).fit_transform(docs)
+    n_comp = min(PROFILE_SVD_DIMS, tfidf.shape[1] - 1)
+    text = StandardScaler().fit_transform(TruncatedSVD(n_comp, random_state=dp.SEED).fit_transform(tfidf))
+    created = pd.to_datetime(users["user_created_at"], format="%a %b %d %H:%M:%S +0000 %Y", utc=True)
+    age_days = ((t0 - created) / pd.Timedelta(days=1)).clip(lower=0)
+    numeric = np.log1p(np.column_stack([users["followers_count"], users["friends_count"],
+                                        users["statuses_count"], age_days]).astype(float))
+    numeric = StandardScaler().fit_transform(numeric)
+    text *= np.sqrt(numeric.shape[1] / n_comp)
+    return np.hstack([text, numeric])
+
+
+def profile_groups(users, t0):
+    """KMeans (seed 42) on profile-only features; k from K_OPTIONS by silhouette score."""
+    X = profile_matrix(users, t0)
+    rows, labels = [], {}
+    for k in K_OPTIONS:
+        if k >= len(users):
+            continue
+        labels[k] = KMeans(k, n_init=10, random_state=dp.SEED).fit_predict(X)
+        sil = silhouette_score(X, labels[k], sample_size=min(SILHOUETTE_SAMPLE, len(users)), random_state=dp.SEED)
+        rows.append({"k": k, "silhouette": sil})
+    sil = pd.DataFrame(rows)
+    best = int(sil.loc[sil["silhouette"].idxmax(), "k"])
+    return pd.Series(labels[best], index=users.index, name="group"), best, sil
+
+
+def first_thread(tweets):
+    return tweets.sort_values("created_at").groupby("user_id")["thread_id"].first()
+
+
 def group_scores(group, users, texts, rumour_tags):
     """Per group: size, Gact (mean log1p statuses_count), Gpre (Jaccard of top-30 TF-IDF keywords of
     members' own pre-entry text + profiles with the rumour tags), Group_att = Gact_norm * Gpre."""
@@ -140,26 +185,43 @@ def build_set(key, lex, rumour_tags):
                            **{f"{l}_pct": 100 * counts[l] / len(lay) for l in LAYERS},
                            **source_authors_in_core(tweets, c)})
 
-    t_ref, _ = ft.reference_times(users, curves)
+    t_ref, t0 = ft.reference_times(users, curves)
     texts, _, _, _ = ft.user_texts(tweets, users, t_ref, lex)
-    group, modularity = louvain_groups(F)
+    thread = first_thread(tweets).reindex(users.index)
+
+    # primary: KMeans on profile-only features; robustness variant: Louvain on the follow graph (D37)
+    group, k, sil = profile_groups(users, t0)
+    group_f, modularity_f = louvain_groups(F)
+    group_f = group_f.reindex(users.index)
     scores = group_scores(group, users, texts, rumour_tags)
-    net["group"] = group.reindex(users.index)
+    scores_f = group_scores(group_f, users, texts, rumour_tags)
+    net["group"] = group
     net = net.join(scores[["size", "Gact", "Gact_norm", "Gpre", "Group_att"]].rename(columns={"size": "group_size"}),
                    on="group")
+    net["group_follow"] = group_f
+    net = net.join(scores_f[["size", "Gact", "Gact_norm", "Gpre", "Group_att"]].add_suffix("_follow")
+                   .rename(columns={"size_follow": "group_size_follow"}), on="group_follow")
+    net["first_thread"] = thread
     net["y"] = feats["y"]
 
-    sizes = scores["size"]
-    group_row = {"set": key, "N": len(users), "groups": len(scores), "singletons": int((sizes == 1).sum()),
-                 "groups_size_ge_2": int((sizes >= 2).sum()), "groups_size_ge_10": int((sizes >= 10).sum()),
-                 "largest": int(sizes.max()), "median_size": float(sizes.median()),
-                 "users_in_groups_ge_10_pct": 100 * sizes[sizes >= 10].sum() / len(users),
-                 "modularity": modularity, "Gpre_nonzero_groups": int((scores["Gpre"] > 0).sum()),
-                 "Gpre_nonzero_users_pct": 100 * (net["Gpre"] > 0).mean()}
+    group_rows = []
+    for variant, g, sc in (("profile_kmeans", group, scores), ("follow_louvain", group_f, scores_f)):
+        sizes = sc["size"]
+        group_rows.append({
+            "set": key, "variant": variant, "primary": variant == "profile_kmeans", "N": len(users),
+            "groups": len(sc), "k_chosen": k if variant == "profile_kmeans" else np.nan,
+            "silhouette": float(sil["silhouette"].max()) if variant == "profile_kmeans" else np.nan,
+            "modularity": modularity_f if variant == "follow_louvain" else np.nan,
+            "singletons": int((sizes == 1).sum()), "smallest": int(sizes.min()), "median_size": float(sizes.median()),
+            "largest": int(sizes.max()),
+            "nmi_first_thread": normalized_mutual_info_score(thread, g),
+            "Gpre_nonzero_users_pct": 100 * (g.map(sc["Gpre"]) > 0).mean()})
+    sil.insert(0, "set", key)
 
     net.to_csv(os.path.join(dp.PROCESSED, f"network_{key}.csv"))
     scores.to_csv(os.path.join(dp.PROCESSED, f"groups_{key}.csv"))
-    return net, scores, layer_rows, group_row
+    scores_f.to_csv(os.path.join(dp.PROCESSED, f"groups_follow_{key}.csv"))
+    return net, scores, layer_rows, group_rows, sil
 
 
 def auc_table(net, key):
@@ -203,17 +265,16 @@ def plot_layers(layers):
 
 
 def plot_group_sizes(all_scores, groups):
+    """Histogram of profile-KMeans group sizes per set (primary grouping)."""
     fig, axes = plt.subplots(1, len(SETS), figsize=(5 * len(SETS), 4.3), squeeze=False)
     for ax, key in zip(axes[0], SETS):
         sizes = all_scores[key]["size"]
-        bins = np.logspace(0, np.log10(sizes.max() + 1), 20)
-        ax.hist(sizes, bins=bins, color="#2a78d6", edgecolor="white", linewidth=1.5)
-        ax.set_xscale("log")
-        ax.set_yscale("log")
-        g = groups[groups["set"] == key].iloc[0]
-        dp.style(ax, f"{dp.EVENT_NAMES.get(key, 'Ottawa story')}: {int(g['groups']):,} groups, "
-                     f"Q = {g['modularity']:.2f}", "Number of groups (log)", xlabel="Group size (users, log)")
-    fig.suptitle("Louvain groups on the undirected follow graph (singletons = users without follow edges)",
+        ax.hist(sizes, bins=20, color="#2a78d6", edgecolor="white", linewidth=1.5)
+        g = groups[(groups["set"] == key) & groups["primary"]].iloc[0]
+        dp.style(ax, f"{dp.EVENT_NAMES.get(key, 'Ottawa story')}: k = {int(g['k_chosen'])}, "
+                     f"silhouette {g['silhouette']:.2f}, NMI(thread) {g['nmi_first_thread']:.2f}",
+                 "Number of groups", xlabel="Group size (users)")
+    fig.suptitle("Profile-only KMeans groups (primary): sizes per set",
                  fontsize=13, x=0.01, ha="left")
     return dp.save(fig, "phase3_group_sizes.png")
 
@@ -224,12 +285,13 @@ def main():
     pd.set_option("display.width", 230, "display.max_colwidth", 90)
     lex = ft.load_lexicon()
     coverage = pd.read_csv(os.path.join(dp.RESULTS, "phase2_coverage.csv")).set_index("set")
-    layers, groups, aucs, all_scores = [], [], [], {}
+    layers, groups, aucs, all_scores, sils = [], [], [], {}, []
     for key in SETS:
         rumour_tags = set(coverage.at[key, "rumour_tags"].split())
-        net, scores, layer_rows, group_row = build_set(key, lex, rumour_tags)
+        net, scores, layer_rows, group_rows, sil = build_set(key, lex, rumour_tags)
         layers += layer_rows
-        groups.append(group_row)
+        groups += group_rows
+        sils.append(sil)
         aucs.append(auc_table(net, key))
         all_scores[key] = scores
         top = scores[scores["size"] >= 10].sort_values("Group_att", ascending=False).head(3)
@@ -238,12 +300,16 @@ def main():
     layers, groups, auc = pd.DataFrame(layers), pd.DataFrame(groups), pd.concat(aucs, ignore_index=True)
     layers.to_csv(os.path.join(dp.RESULTS, "phase3_layers.csv"), index=False)
     groups.to_csv(os.path.join(dp.RESULTS, "phase3_groups.csv"), index=False)
+    sils = pd.concat(sils, ignore_index=True)
+    sils.to_csv(os.path.join(dp.RESULTS, "phase3_kmeans_silhouette.csv"), index=False)
     auc.to_csv(os.path.join(dp.RESULTS, "phase3_auc.csv"), index=False)
     plot_layers(layers)
     plot_group_sizes(all_scores, groups)
     print("\n=== Layers (core share sensitivity) and source authors in the core ===")
     print(layers.round(1).to_string(index=False))
-    print("\n=== Groups ===")
+    print("\n=== KMeans silhouette by k ===")
+    print(sils.round(4).to_string(index=False))
+    print("\n=== Groups (primary = profile KMeans; follow Louvain = robustness variant) ===")
     print(groups.round(3).to_string(index=False))
     print("\n=== Leakage check: single-feature ROC-AUC (y = first side I) ===")
     print(auc.round(4).to_string(index=False))
@@ -264,17 +330,22 @@ def check():
         for share in CORE_SENSITIVITY:
             row = layers[(layers["set"] == key) & np.isclose(layers["core_share_pct"], 100 * share)].iloc[0]
             assert sum(row[f"{l}_users"] for l in LAYERS) == N, f"{key}: layer sizes do not sum to N"
-        assert net["group"].notna().all() and (net.groupby("user_id")["group"].nunique() == 1).all(), \
-            f"{key}: a user without exactly one group"
+        for col in ("group", "group_follow"):
+            assert net[col].notna().all() and (net.groupby("user_id")[col].nunique() == 1).all(), \
+                f"{key}: a user without exactly one {col}"
+        nmi = normalized_mutual_info_score(net["first_thread"], net["group"])
+        assert nmi < MAX_THREAD_NMI, f"{key}: profile groups still track threads (NMI {nmi:.3f})"
+        nmi_f = normalized_mutual_info_score(net["first_thread"], net["group_follow"])
         assert net["r"].between(*R_CLIP).all(), f"{key}: r outside {R_CLIP}"
         assert net["pr_norm"].between(0, 1).all() and net["mpr"].between(0, TAU).all()
-        for c in ("Gact_norm", "Gpre", "Group_att"):
+        for c in ("Gact_norm", "Gpre", "Group_att", "Gact_norm_follow", "Gpre_follow", "Group_att_follow"):
             assert net[c].notna().all() and net[c].between(0, 1).all(), f"{key}: {c} outside [0, 1]"
         bad = auc[(auc["set"] == key) & (auc["auc_any_direction"] > ft.AUC_LIMIT)]
         assert bad.empty, f"{key}: possible leakage, AUC > {ft.AUC_LIMIT}: {bad[['feature', 'auc']].to_dict('records')}"
         worst = auc[auc["set"] == key].sort_values("auc_any_direction").iloc[-1]
         sizes = net.groupby("group").size()
         print(f"{key:22s} OK  N={N:,}  core={n_core} ({100 * n_core / N:.1f}%)  groups={len(sizes):,}  "
+              f"NMI(group, thread) profile={nmi:.3f} vs follow={nmi_f:.3f}  "
               f"r in [{net['r'].min():.2f}, {net['r'].max():.2f}]  max AUC={worst['auc_any_direction']:.3f} ({worst['feature']})")
     print("All Phase 3 checks passed.")
 
