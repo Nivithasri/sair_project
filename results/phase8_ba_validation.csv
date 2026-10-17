@@ -1,0 +1,8 @@
+quantity,agent,mean_field
+peak I (fraction of N),0.02685371470124833,0.36776461862690735
+time of peak I (h),26.0,52.0
+final C_I,0.045289661859168585,0.9122517302522739
+final C_A,0.9542182765725367,0.018953189194392737
+time C_I reaches 50% of its final value (h),13.985025281991446,34.359081774364
+corr(I(t)) agent vs mean-field,0.4963176163589522,1.0
+corr(C_I(t)) agent vs mean-field,0.8144355361980289,1.0

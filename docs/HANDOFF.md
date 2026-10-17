@@ -1,14 +1,14 @@
 # Session handoff — read this first
 
-Last updated: 2026-10-18 (session 4: Phase 7 done). Phase 7 commit: see `git log` (message "Phase 7: SAIR-C control").
-Companion files: `CLAUDE.md` (rules + fixed decisions), `PLAN.md` (phases), `DECISIONS.md` (D1–D75, every
+Last updated: 2026-10-18 (session 4: Phases 7 and 8 done). Phase 7 commit: see `git log` (message "Phase 7: SAIR-C control").
+Companion files: `CLAUDE.md` (rules + fixed decisions), `PLAN.md` (phases), `DECISIONS.md` (D1–D80, every
 choice and deviation with numbers), `data/raw/README.md` (data provenance and licences).
 
 ---
 
 ## 0. Summary (start here)
 
-- **Status:** Phases 1–7 done (Phase 7 = SAIR-C, D73–D75). **Phases 8–9 not started.**
+- **Status:** Phases 1–8 done (Phase 7 = SAIR-C D73–D76, Phase 8 = targeting D77–D80). **Phase 9 not started.**
 - **Main model for Phases 7–8: (d+)-uniform** = SAIR-H + Bass external influence, network P1, uniform Mult_eff = κ.
   It was chosen as the SAIR-H-family model with the **best total AIC over the three sets (D69)**: total AIC −4295.2,
   BIC −4217.8. Load it with `kind, table = sair.load_main()`.
@@ -26,8 +26,16 @@ choice and deviation with numbers), `data/raw/README.md` (data provenance and li
   on CH at 10% and in the weighted cost J (which favours hybrids by construction). Feedback: ρ frozen at 1 changes ≈ nothing;
   the feedback that matters runs through the global-share fallback (d1 frozen: up to 47–70% of the effect at 10% effort on
   SS / CH refute; 0 on the story where κ = 0). Details §3b, D75.
-- **Next task:** Phase 8 (`src/targeting.py`): centrality-targeted intervention on PHEME **and** a synthetic Barabási–Albert
-  network (D72), main model (d+)-uniform, via P1. Phase 9 has the optional extra recovery starts. **Wait for the user's spec/approval.**
+- **Phase 7 follow-ups (D76):** Sydney now runs at dt/2 (the dt warning is gone; adding u, v to `step_dt` is a no-op). **Tipping robustness (CH):**
+  the 10%-effort hybrid tipping survives κ ∈ {12.5, 25, 50} (D/D0 .016–.037; κ = 5 is disfavoured by +28.7 AIC and tips even earlier) but **not**
+  the fallback P1 = 0.5 (the refit goes to κ ≈ 0.09, AIC +100.9, no tipping): it depends on the global-share fallback the CH fit needs.
+- **Phase 8 result:** PHEME: degree and PageRank beat the random CI in 35 of 36 cells (CH block k = 50: .53 / .16 / .03 / .00 for
+  degree / PageRank / betweenness / random), **but the effect is the removal of source authors' injection (88–99.8% of the block effect), not the
+  P1/conformity route** (friend-count channel ≤ 0.9%); recruiting saturates (10 random recruits already give .965 on CH; α = 13 is not identifiable).
+  BA agent model: **fails validation against the mean-field model** (final C_I 4.5% vs 91%, C_A 95% vs 2%); hubs help block (≈ 8% vs 2% random,
+  fitted κ), recruit is saturated, hybrid with many hubs is worse than random; with κ = 0 blocking is harmful. Details §3b, D77–D80.
+- **Next task:** Phase 9 (packaging, optional extra recovery starts, D72). **Wait for the user's spec/approval.** Open question: a BA variant
+  with source injection or a smaller α (the validation failure makes the current BA regime A-dominated).
 - **Rules that matter most:** strict honesty, report negative results, never tune to make a model win, never relax the
   leakage rules (§5), log every deviation in `DECISIONS.md`, one phase at a time and then stop, no Claude attribution in git.
 
@@ -87,7 +95,7 @@ the source stance; the **first** support/deny post fixes I or A (no switching); 
 | 5 SAIR fit | `src/sair.py` | **done** (refit: 9 models, Bass term, rate/κ bounds 50, cross-model starts, numba, staged) | `cee4567`, `136a585`, `dc97afe` |
 | 6 Ablation | `src/ablation.py` | **done** (main model + paper-faithful (d+)) | `dc97afe` |
 | 7 SAIR-C | `src/control.py` (+ `_advance` / `simulate` extended in `sair.py`) | **done** (D73–D75) | see `git log` |
-| 8 Targeting | — | not started | — |
+| 8 Targeting | `src/targeting.py` | **done** (D77–D80) | see `git log` |
 | 9 Packaging | — | not started | — |
 
 ---
@@ -251,8 +259,23 @@ Knobs u = λu·γ, v = λv/T90 (T90: CH 49.8 h, SS 16.5 h, story 2.0 h); ρ_I = 
 - Grid Pareto front: 14 (CH), 16 (SS), 15 (story) non-dominated points. Wide search (knobs to 50) only as sensitivity (CH hybrid .002).
 - Feedback share at the best points: ρ = 1 ≈ 0 (≤ 0.5% SS, ≤ 9% CH); d1(t) frozen: CH block 0.3%, refute / hybrid 5–9% (2–5%), 70% refute at 10%;
   SS 1% / 5–17% / 46–47%; story 0 (κ = 0). The effect runs through the P1 fallback I/(I + A) for users with no sided friends.
-- Checks: λ = 0 == Phase 5 (2.8e-14); sums ≤ 1.3e-13; numba == Python; D monotone on all grid lines; **one dt warning:** SS (λu, λv) = (5, 0),
-  state difference 1.04e-3 (> 1e-3), outcomes D 2.2e-4.
+- Checks: λ = 0 == Phase 5 (2.8e-14); sums ≤ 1.3e-13; numba == Python; D monotone on all grid lines; one dt warning (SS (λu, λv) = (5, 0), 1.04e-3) was
+  resolved in D76 by running Sydney at dt/2 (now ≤ 5.2e-4).
+
+### Phase 7 follow-up and Phase 8 (D76–D80)
+**Tipping robustness (CH, 10% effort, hybrid D/D0):** κ = 5 → .013 (tips already at 5%); 12.5 → .016; 25 → .036; 50 → .037; fallback P1 = 0.5 (refit,
+κ → 0.09, ΔAIC +100.9) → .72, no tipping. Refits: κ = 12.5 / 25 / 50 tie with the main fit, κ = 5 is +28.7 AIC.
+
+**PHEME targeting, reduction 1 − D/D0 at k = 50 (degree / PageRank / betweenness / random):**
+| Set | block | recruit | hybrid |
+|---|---|---|---|
+| CH | .532 / .160 / .035 / .001 | .977 / .977 / .977 / .975 | .985 / .985 / .973 / .970 |
+| SS | .078 / .078 / .004 / .000 | .975 / .974 / .974 / .973 | .996 / .985 / .982 / .968 |
+| story | .374 / .374 / 0 / .125 (± .10) | .926 / .925 / .926 / .908 | .975 / .977 / .875 / .840 |
+- Block acts through source injection (88–99.8%); friend-count channel ≤ 0.9%. Story: friend channel 0 (κ = 0). Recruit and hybrid are saturated.
+
+**BA agent model (10 graphs × 20 runs):** validation fails (final C_I 4.5% vs 91%, C_A 95% vs 1.9%, peak 2.7% vs 36.8%). Block reduction (fitted κ) 2 → 8%
+vs random 0.3 → 2%; recruit .88 for every method; hybrid with hubs falls to .84 (random .875) at 2%; κ = 0: block −0.3 … −6%, recruit −6 pp.
 
 ## 4. Key findings for the write-up
 
@@ -300,6 +323,11 @@ Knobs u = λu·γ, v = λv/T90 (T90: CH 49.8 h, SS 16.5 h, story 2.0 h); ρ_I = 
 | D70 | κ at 50 in the ranked models = a step "follow the sided-friends majority"; κ not widened again |
 | D71 | Forecast limitation: no model forecasts later waves; (d)-uniform unstable on SS; main model ≥ (a) |
 | D72 | Plan for Phases 7–9: event-relative knobs + Pareto front; BA network in Phase 8; optional extra recovery starts in Phase 9 |
+| D76 | Phase 7 fixes: Sydney dt/2 (u, v in step_dt is a no-op); CH tipping robustness over κ and the fallback P1 |
+| D77 | Phase 8 A design: follow-graph centralities, pools, block / recruit channels, hybrid split, own checks |
+| D78 | Phase 8 A results: injection channel dominates; recruiting saturated |
+| D79 | Phase 8 B design: BA agent model, targeting, paired runs, CI over graphs |
+| D80 | Phase 8 B results; validation against mean-field fails |
 | D73 | SAIR-C model and knobs; campaign counts in C_A; ρ_I uses C_I − B; kernel extended, Phase 5 bitwise unchanged |
 | D74 | Equal-effort search along rays (all roots), grid range primary + wide sensitivity, Pareto, cost J |
 | D75 | Phase 7 results, feedback test (ρ = 1 vs d1 frozen), checks and the SS dt warning |
@@ -327,14 +355,13 @@ Knobs u = λu·γ, v = λv/T90 (T90: CH 49.8 h, SS 16.5 h, story 2.0 h); ρ_I = 
 
 ---
 
-## 6. NEXT TASK — Phase 8: centrality-targeted intervention (`src/targeting.py`, docs/extension.md §2)
+## 6. NEXT TASK — Phase 9: packaging (PLAN.md)
 
-**Wait for the user's spec.** Fixed so far (PLAN.md, D72): main model (d+)-uniform; PHEME graph **and** a synthetic Barabási–Albert
-network (size and m to be chosen and logged); methods degree / PageRank / betweenness (k = 500 sampling) / random (15 runs averaged);
-k ∈ {10, 25, 50, 100}; block / recruit / hybrid. With uniform Mult_eff, targeting acts on δ only through P1 (friends' majority).
-Lessons from Phase 7: δ responds to interventions mainly through the fallback share I/(I + A) and, on the story, not at all (κ = 0);
-effort is not monotone in the knobs; "hybrid is best" did not hold generally at equal effort. Reuse: `control.run_point`, `sair.simulate`
-(`u`, `v`, `rho_one`, `d1_path`, `extras` arguments), `control.run_jobs` pattern for checkpointed parallel runs.
+**Wait for the user's spec.** Contents per PLAN.md: optional extra recovery starts for the main model (D72), results table (RMSE, strategy costs,
+peak reduction per centrality), README (problem, pipeline, contributions, the corrections of DECISIONS.md, limitations incl. D60, D80),
+`notebooks/experiments.ipynb`. Honest-reporting items to carry into the README: Eq. 26 loses (D49), per-user factors unsupported (D67),
+"hybrid is best" holds only on CH at 10% (D75), tipping depends on the fallback P1 (D76), targeting works through source injection (D78),
+the BA agent model fails validation (D80).
 
 ---
 
@@ -351,7 +378,8 @@ Set `LOKY_MAX_CPU_COUNT=4` to silence a harmless joblib warning on Windows (`[Wi
 | 4 | `python src/drive.py --check` | ~30 s | `data/processed/{drive,drive_model,friends}_<set>[_followgroups].*`, `results/phase4_*` |
 | 5 | `python src/sair.py --check` (stage 1 then 2) · `--stage 1\|2 --check` · `--fresh` (drop the stages' checkpoints) · `--check-only` | from scratch ~6–8 h on 12 cores; from checkpoints minutes | `results/phase5_*.csv`, `phase5_plot1/2/2b/2c_*.png`, `data/processed/model_curves_<set>.csv` (main model) |
 | 6 | `python src/ablation.py --check` (`--check-only`) | ~1.5–2 h from scratch (refits checkpointed) | `results/phase6_*.csv`, `phase6_plot3*_*.png`, `data/processed/ablation_edges_<set>.csv` |
-| 7 | `python src/control.py --check` (`--stage 1\|2`, `--fresh`, `--check-only`) | ~2.5 min stage 1 (147 jobs, 12 workers, checkpointed), seconds for stage 2 | `results/phase7_{grid,strategies,feedback,cost}.csv`, `phase7_plot4/5/5b_*.png` |
+| 8 | `python src/targeting.py --part A or B or AB --check` (`--fresh`, `--check-only`) | A ~3 min, B ~9 min (260 jobs, checkpointed; the first BA run builds 10 graphs) | `results/phase8_{pheme,channels,ba,ba_validation}.csv`, `phase8_plot6/7/8/8b_*.png` |
+| 7 | `python src/control.py --check` (`--stage 1\|2`, `--fresh`, `--check-only`; `--tipping` = CH κ / fallback refits, ~25 min) | ~2.5 min stage 1 (147 jobs, 12 workers, checkpointed), seconds for stage 2 | `results/phase7_{grid,strategies,feedback,cost}.csv`, `phase7_plot4/5/5b_*.png` |
 
 - `<set>` ∈ {charliehebdo, sydneysiege, story_three_shootings}.
 - The pipeline is deterministic (seed 42; two full runs gave byte-identical outputs).

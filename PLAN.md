@@ -1,7 +1,7 @@
 # Implementation Phase Plan
 
 Each phase: plan → code → run check → show results → stop for approval.
-**Status:** Phases 1–7 done (Phase 5 refit D57–D71, Phase 6 D67, Phase 7 D73–D75). Phases 8–9 not started.
+**Status:** Phases 1–8 done (Phase 5 refit D57–D71, Phase 6 D67, Phase 7 D73–D76, Phase 8 D77–D80). Phase 9 not started.
 Main model for Phases 6–8: **(d+)-uniform** (D69). Plan for 7–9: D72.
 See `docs/HANDOFF.md` for results and findings.
 Equations and definitions live in `docs/SAIR_paper.md` and `docs/extension.md`.
@@ -98,7 +98,7 @@ Main model (d+)-uniform and, as the paper-faithful ablation, (d+) (ranked Mult_e
 **Check:** sums = 1 for every variant; the full model reproduces the Phase 5 fit exactly; each knock-out changes only its
 intended input; rank knock-outs have no effect on uniform-Mult_eff models.
 
-## Phase 7 — SAIR-C  (`src/control.py`)  — docs/extension.md §1  ✅ DONE (D73–D75)
+## Phase 7 — SAIR-C  (`src/control.py`)  — docs/extension.md §1  ✅ DONE (D73–D76)
 Main model (d+)-uniform, per set with its fitted parameters; `sair._advance` / `simulate` extended (bitwise unchanged at u = v = 0).
 1. Blocked state B, knobs u (I → B) and v (S → A, counted in C_A), constant from t = 0; ρ_I = (C_I − B)/C_I,data in P1.
 2. Event-relative knobs: u = λu·γ (λu ∈ {0, .25, .5, 1, 2, 3, 5}), v = λv/T90 (λv ∈ {0, .1, .25, .5, 1, 1.5, 2}).
@@ -106,22 +106,25 @@ Main model (d+)-uniform, per set with its fitted parameters; `sair._advance` / `
 4. Strategies none / block / refute / hybrid compared at equal total effort E = 2 / 5 / 10% of N (all roots of E = budget along rays,
    knobs inside the grid; wide search as sensitivity); Pareto front of D/D0 vs E; weighted cost J, w ∈ {.01, .05, .2}.
 5. Feedback test (ρ frozen at 1; d1(t) frozen to the no-control path) and robustness with (a+) and (d)-uniform.
+6. D76: Sydney at dt/2; tipping robustness on CH (κ ∈ {5, 12.5, 25, 50} refit, fallback P1 = 0.5): `python src/control.py --tipping`,
+   `results/phase7_kappa_fits.csv`, `phase7_tipping.csv`.
 
 **Output:** `results/phase7_grid.csv`, `phase7_strategies.csv`, `phase7_feedback.csv`, `phase7_cost.csv`; Plot 4 (`phase7_plot4_strategies.png`),
 Plot 5 (`phase7_plot5_heatmap.png`), Plot 5b (`phase7_plot5b_pareto.png`); checkpoint `data/processed/checkpoints/phase7_stage1.jsonl`.
 **Check:** `python src/control.py --check-only`: docs worked step, λ = 0 == Phase 5 curves, S+I+A+R+B = 1, states in [0, 1], numba == Python,
 dt vs dt/2, equal-effort points at the budget, D monotone along grid lines (reported).
 
-## Phase 8 — Centrality targeting  (`src/targeting.py`)  — docs/extension.md §2
-Built on the Phase 5 **main model (d+)-uniform**. Runs on PHEME **and on a synthetic Barabási–Albert network** (D72;
-same k values, methods and actions; size and m to be chosen and logged).
-1. Degree, PageRank, betweenness (k=500 sampling), random (15 runs averaged).
-2. For k ∈ {10,25,50,100}: block / recruit / hybrid (k/2 + k/2).
-3. Recompute P1 → Drif1 → δ1 → run SAIR-C; record peak and total reach.
-Note: with uniform Mult_eff, targeting acts on δ only through P1 (the friends' majority), which blocking and recruiting change.
+## Phase 8 — Centrality targeting  (`src/targeting.py`)  — docs/extension.md §2  ✅ DONE (D77–D80)
+Main model (d+)-uniform. **Part A (PHEME, per set):** degree / PageRank / betweenness (k = 500) on the follow graph and random (15 draws,
+CI); k ∈ {10, 25, 50, 100}; block (channels: friend counts, source injection), recruit (n_A + injection), hybrid ceil(k/2) + floor(k/2);
+each channel alone; D/D0, peak, final C_I, C_A. **Part B (BA, N = 8,251, m = 2, 10 graphs × 20 runs):** agent-based SAIR-H+ with CH's rates,
+k ∈ {0.1, 0.5, 1, 2}% of N, block / recruit / hybrid, κ fitted vs κ = 0, validation against the mean-field model.
 
-**Output:** Plot 6 (peak vs k per method), Plot 7 (bars at fixed k incl. hybrid), results CSV.
-**Check:** same k for all methods; random averaged.
+**Output:** `results/phase8_pheme.csv`, `phase8_channels.csv`, `phase8_ba.csv`, `phase8_ba_validation.csv`; Plot 6 (`phase8_plot6_pheme_reduction.png`),
+Plot 7 (`phase8_plot7_pheme_bars.png`), Plot 8 (`phase8_plot8_ba_reduction.png`), Plot 8b (`phase8_plot8b_ba_validation.png`);
+checkpoints `data/processed/checkpoints/phase8_{pheme,ba}.jsonl`.
+**Check:** `python src/targeting.py --check-only`: empty intervention == baseline == Phase 5, same k, targets in pools, S+I+A+R = 1;
+BA: seeds, state initialisation, monotone cumulative counts, A seeds at 25 h, reproducibility. (The user's CHECKS list was empty; these are ours.)
 
 ## Phase 9 — Packaging
 0. Optional (D72): extra recovery starts for the main model (more random starts or cross-model seeding per noise seed),

@@ -21,3 +21,4 @@ __pycache__/
 
 # reference papers (copyrighted PDFs, kept locally only)
 papers/
+data/processed/ba_graph_*.pkl*
