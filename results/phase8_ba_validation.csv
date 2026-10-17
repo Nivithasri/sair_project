@@ -1,8 +1,23 @@
-quantity,agent,mean_field
-peak I (fraction of N),0.02685371470124833,0.36776461862690735
-time of peak I (h),26.0,52.0
-final C_I,0.045289661859168585,0.9122517302522739
-final C_A,0.9542182765725367,0.018953189194392737
-time C_I reaches 50% of its final value (h),13.985025281991446,34.359081774364
-corr(I(t)) agent vs mean-field,0.4963176163589522,1.0
-corr(C_I(t)) agent vs mean-field,0.8144355361980289,1.0
+variant,validation_status,quantity,agent,mean_field
+plain,qualitative only (validation failed),peak I (fraction of N),0.02685371470124833,0.36776461862690735
+plain,qualitative only (validation failed),time of peak I (h),26.0,52.0
+plain,qualitative only (validation failed),time of peak A (h),27.0,26.0
+plain,qualitative only (validation failed),final C_I,0.045289661859168585,0.9122517302522739
+plain,qualitative only (validation failed),final C_A,0.9542182765725367,0.018953189194392737
+plain,qualitative only (validation failed),time C_I reaches 50% of its final value (h),13.985025281991446,34.359081774364
+plain,qualitative only (validation failed),corr(I(t)),0.4963176163589522,1.0
+plain,qualitative only (validation failed),corr(C_I(t)),0.8144355361980289,1.0
+plain,qualitative only (validation failed),corr(C_A(t)),0.8892527446550589,1.0
+plain,qualitative only (validation failed),"shape RMSE vs data (normalised C_I, C_A)",0.24217090454380968,
+plain,qualitative only (validation failed),"validation passes (final shares within 0.1, I peaks before A)",0.0,
+inject,validated,peak I (fraction of N),0.33136892497879045,0.36776461862690735
+inject,validated,time of peak I (h),28.0,52.0
+inject,validated,time of peak A (h),37.0,26.0
+inject,validated,final C_I,0.8790401163495334,0.9122517302522739
+inject,validated,final C_A,0.025211489516422252,0.018953189194392737
+inject,validated,time C_I reaches 50% of its final value (h),18.612672441450115,34.359081774364
+inject,validated,corr(I(t)),0.7511843663254945,1.0
+inject,validated,corr(C_I(t)),0.9565666612227381,1.0
+inject,validated,corr(C_A(t)),0.9706957853785336,1.0
+inject,validated,"shape RMSE vs data (normalised C_I, C_A)",0.13379375887808898,
+inject,validated,"validation passes (final shares within 0.1, I peaks before A)",1.0,

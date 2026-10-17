@@ -1,7 +1,7 @@
 # Implementation Phase Plan
 
 Each phase: plan → code → run check → show results → stop for approval.
-**Status:** Phases 1–8 done (Phase 5 refit D57–D71, Phase 6 D67, Phase 7 D73–D76, Phase 8 D77–D80). Phase 9 not started.
+**Status:** Phases 1–8 done (Phase 5 refit D57–D71, Phase 6 D67, Phase 7 D73–D76, Phase 8 D77–D82). Phase 9 not started.
 Main model for Phases 6–8: **(d+)-uniform** (D69). Plan for 7–9: D72.
 See `docs/HANDOFF.md` for results and findings.
 Equations and definitions live in `docs/SAIR_paper.md` and `docs/extension.md`.
@@ -114,17 +114,22 @@ Plot 5 (`phase7_plot5_heatmap.png`), Plot 5b (`phase7_plot5b_pareto.png`); check
 **Check:** `python src/control.py --check-only`: docs worked step, λ = 0 == Phase 5 curves, S+I+A+R+B = 1, states in [0, 1], numba == Python,
 dt vs dt/2, equal-effort points at the budget, D monotone along grid lines (reported).
 
-## Phase 8 — Centrality targeting  (`src/targeting.py`)  — docs/extension.md §2  ✅ DONE (D77–D80)
+## Phase 8 — Centrality targeting  (`src/targeting.py`)  — docs/extension.md §2  ✅ DONE (D77–D82)
 Main model (d+)-uniform. **Part A (PHEME, per set):** degree / PageRank / betweenness (k = 500) on the follow graph and random (15 draws,
 CI); k ∈ {10, 25, 50, 100}; block (channels: friend counts, source injection), recruit (n_A + injection), hybrid ceil(k/2) + floor(k/2);
 each channel alone; D/D0, peak, final C_I, C_A. **Part B (BA, N = 8,251, m = 2, 10 graphs × 20 runs):** agent-based SAIR-H+ with CH's rates,
 k ∈ {0.1, 0.5, 1, 2}% of N, block / recruit / hybrid, κ fitted vs κ = 0, validation against the mean-field model.
 
-**Output:** `results/phase8_pheme.csv`, `phase8_channels.csv`, `phase8_ba.csv`, `phase8_ba_validation.csv`; Plot 6 (`phase8_plot6_pheme_reduction.png`),
-Plot 7 (`phase8_plot7_pheme_bars.png`), Plot 8 (`phase8_plot8_ba_reduction.png`), Plot 8b (`phase8_plot8b_ba_validation.png`);
-checkpoints `data/processed/checkpoints/phase8_{pheme,ba}.jsonl`.
-**Check:** `python src/targeting.py --check-only`: empty intervention == baseline == Phase 5, same k, targets in pools, S+I+A+R = 1;
-BA: seeds, state initialisation, monotone cumulative counts, A seeds at 25 h, reproducibility. (The user's CHECKS list was empty; these are ours.)
+Fixes (D81, D82): recruit injection scaled by s ∈ {1, 0.1, 0.01}, effort = fraction of N moved, equal-effort comparison, α-fixed refits (CI ends 4.4 / 21.5);
+BA with source injection on hubs (calibrated β / α multipliers, validation criteria, recruit at s = 0.1); the seeds-only BA variant is kept as "qualitative only".
+
+**Output:** `results/phase8_pheme.csv`, `phase8_channels.csv`, `phase8_effort.csv`, `phase8_alpha_fits.csv`, `phase8_ba.csv`, `phase8_ba_validation.csv`,
+`phase8_ba_calibration.csv`; Plot 6 / 6b (`phase8_plot6_pheme_reduction.png`, `..._plot6b_pheme_reduction_s0.1.png`), Plot 7 (`phase8_plot7_pheme_bars.png`), Plot 9 (`phase8_plot9_effort.png`),
+Plot 8 (`phase8_plot8_ba_reduction.png`, seeds-only: `..._noinjection.png`), Plot 8b (`phase8_plot8b_ba_validation.png`), Plot 8c (`phase8_plot8c_ba_calibration.png`);
+checkpoints `data/processed/checkpoints/phase8_{pheme_v2,ba,ba_inject,ba_calibration,alpha_fits}.jsonl`.
+**Check:** `python src/targeting.py --check-only`: empty intervention == baseline == Phase 5, same k, targets in pools, S+I+A+R = 1, effort bookkeeping and s scaling;
+BA: seeds, state initialisation, monotone cumulative counts, A seeds at 25 h, reproducibility, injection events (distinct hubs, blocked hub removes its event, denying hub never
+blocked, recruit injection moves mass). (The user's CHECKS list of the first spec was empty; these are ours.)
 
 ## Phase 9 — Packaging
 0. Optional (D72): extra recovery starts for the main model (more random starts or cross-model seeding per noise seed),
