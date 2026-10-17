@@ -12,6 +12,8 @@ data/processed/groups_*.csv
 data/processed/drive_*.csv
 data/processed/friends_*.csv
 data/processed/model_curves_*.csv
+data/processed/ablation_edges_*.csv
+data/processed/checkpoints/
 
 __pycache__/
 *.pyc

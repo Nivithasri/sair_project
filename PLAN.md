@@ -1,7 +1,7 @@
 # Implementation Phase Plan
 
 Each phase: plan → code → run check → show results → stop for approval.
-**Status:** Phases 1–5 done (Phase 5 revised, D50–D56). Phases 6–9 not started. Phase 8 must include the BA network.
+**Status:** Phases 1–6 done (Phase 5 refit D57–D71; Phase 6 D67). Phases 7–9 not started. Main model for Phases 6–8: **(d+)-uniform** (D69).
 See `docs/HANDOFF.md` for results and findings.
 Equations and definitions live in `docs/SAIR_paper.md` and `docs/extension.md`.
 
@@ -12,7 +12,8 @@ src/
   features.py    Phase 2
   network.py     Phase 3
   drive.py       Phase 4
-  sair.py        Phase 5–6
+  sair.py        Phase 5
+  ablation.py    Phase 6
   control.py     Phase 7
   targeting.py   Phase 8
 notebooks/experiments.ipynb   runs everything end-to-end
@@ -62,34 +63,42 @@ Only the user's OWN posts before t_ref + profile description (no retweeted text)
 **Output:** `data/processed/drive_<set>.csv`, `drive_model_<set>.json`, `friends_<set>.csv`; `results/phase4_*.csv`, Drif plots.
 **Check:** Drif1 + Drif2 = 1; Mult_eff in [0, κ]; no NaN; degeneracy table; coefficients; CV AUCs ≤ 0.95 (flag gap > 0.10); worked example 0.769.
 
-## Phase 5 — SAIR simulation & validation  (`src/sair.py`)  — docs/SAIR_paper.md §5  ✅ DONE (revised)
-First version `cee4567` (D45–D49); revision D50–D56.
-Common setup for every model: fractions of N; Euler dt = bin/50 (0.02 h events, 0.005 h story), events hit exactly
-(D47, D53); source injection θ·w_s/Σw (D46); I0, A0 from the first bin; target = cumulative C_I, C_A (normalised by the
-finals); least squares; bounded Nelder-Mead (log space for rates and w), 20 random starts, seed 42 (D51).
-1. Models: (a) constant-rate SAIR (Eq. 22) · (b) Eq. 26, uniform Mult_eff · (c) Eq. 26 with data-driven δ (D45) ·
-   **(d) SAIR-H** (main model, D50) · (d)-uniform · (e) SAIR-H mean-field (global P1).
-2. AIC / BIC per set and model; bound flags; converged counts.
-3. Validation (D52): forecast from the 50% point of C_I (data inputs frozen at the cut); parameter recovery (CH, (d),
-   σ = 0.01, 5 seeds × 10 starts); residual bootstrap ((a), (d), 50 resamples, warm start).
-4. **Result (D54–D56): (d) does NOT beat (a) on AIC in any set** (CH +0.3, SS +4.0, story +85.6 with the specified
-   bounds; with non-binding rate bounds the story flips to (d) −21.3, D55). Forecasts tie. (d)-uniform beats (d).
-   κ, w, α are not identifiable (recovery bimodal).
-5. **Decision rule fired → Phase 8 MUST also run on a synthetic Barabási–Albert network.**
+## Phase 5 — SAIR simulation & validation  (`src/sair.py`)  — docs/SAIR_paper.md §5  ✅ DONE (refit)
+First version `cee4567` (D45–D49); revision `136a585` (D50–D56); refit D57–D71.
+Setup: fractions of N; Euler dt = bin/50 halved until rate·dt ≤ 0.025, steps in a numba kernel identical to the Python
+loop (D58, D62); source injection (D46); least squares on C/C_final; bounded Nelder-Mead (log space for rates and w);
+rates ∈ [1e-3, 50], κ ∈ [0, 50], w ∈ [0.5, 168], θ, η ∈ [0, 1]; 20 random starts (seed 42) + cross-model starts (D64);
+checkpointed, staged run (`--stage 1|2`, D62).
+1. Models: (a) constant-rate, (a+) + Bass external influence (D57), (b) Eq. 26 uniform, (c) Eq. 26, (d) SAIR-H, (d+),
+   (d)-uniform, (d+)-uniform, (e) mean-field.
+2. Stage 1: AIC / BIC per set and model, bound flags, converged counts. **Main model = (d+)-uniform** (best total AIC over
+   the three sets among the SAIR-H family, D69).
+3. Stage 2 (validation of (a), (a+), main, and (d)-uniform as a secondary row): forecast after max(50% of C_I, 10th bin)
+   with data inputs frozen at the cut (D59); recovery on CH (D60); moving-block bootstrap (blocks of 5 bins) with a
+   cold-start check (D59).
+4. Findings: Bass term decisive on SS / story; regression ranking adds nothing; network P1 adds on CH; κ, w (and α in
+   ranked models) not identifiable — do not interpret (D60, D70); no model forecasts later waves (D71).
 
-**Output:** `results/phase5_params.csv` (all models; Phases 6–8 reuse `model == "sairh"`), `phase5_model_comparison.csv`,
-`phase5_forecast.csv`, `phase5_recovery.csv`, `phase5_bootstrap_ci.csv`; Plot 1 (states, d), Plot 2 (cumulative fit
-a/c/d/e), Plot 2b (d prevalence vs display), Plot 2c (forecast); `data/processed/model_curves_<set>.csv` (d).
-**Check:** sum = 1 each step (±1e-9), states and δ in [0, 1]; dt-convergence (bin/50 vs bin/100) < 1e-3 for every model;
-nesting unit test ((d) with κ = 0 = (a) with β/2, α/2, to 1e-9); docs worked-step unit test; ≥ 15/20 converged starts
-for every fit and CH (a) best start converged; recovery error reported.
+**Output:** `results/phase5_params.csv`, `phase5_model_comparison.csv`, `phase5_main_model_rule.csv`, `phase5_forecast.csv`,
+`phase5_recovery.csv`, `phase5_bootstrap_ci.csv`, `phase5_bootstrap_coldcheck.csv`; plots 1, 2, 2b, 2c;
+`data/processed/model_curves_<set>.csv` (main model).
+**Check:** sum = 1 (±1e-9), states and δ in [0, 1]; dt vs dt/2 < 1e-3 for every model; nesting at κ = 0 exact;
+numba == Python; no model worse than its submodels; docs worked step; ≥ 15 converged starts; recovery reported.
 
-## Phase 6 — Ablation  (`src/sair.py`)  — docs/SAIR_paper.md §6
-Uses Phase 5 **model (d)** and its fitted parameters. Re-run with emotion removed (S_emo=1) and popularity removed (Pop=1); optional others.
-**Output:** Plot 3. **Check:** no-popularity never peaks; no-emotion has a lower peak.
+## Phase 6 — Ablation  (`src/ablation.py`)  — docs/SAIR_paper.md §6  ✅ DONE
+Main model (d+)-uniform and, as the paper-faithful ablation, (d+) (ranked Mult_eff) (D67); (d)-uniform as a secondary row.
+1. Knock-outs with fitted parameters held fixed: emotion, popularity, content fit, connectivity, friend power (rebuilt
+   from per-edge components), network (global P1), source injection, Bass external influence.
+2. Refit importance: each knock-out refit (warm + 9 random starts), ΔAIC vs the full model.
+3. Paper Fig. 8 test (strong vs weak layer Drif1; Drif1 vs Gact, Gpre) and Fig. 6 test (regression per 10-h window, CH).
+
+**Output:** `results/phase6_ablation.csv`, `phase6_importance.csv`, `phase6_layers.csv`, `phase6_fig8_test.csv`,
+`phase6_fig6_test.csv`; Plot 3 / 3b (main model), Plot 3 / 3b `_paper` ((d+)), Plot 3c (layers).
+**Check:** sums = 1 for every variant; the full model reproduces the Phase 5 fit exactly; each knock-out changes only its
+intended input; rank knock-outs have no effect on uniform-Mult_eff models.
 
 ## Phase 7 — SAIR-C  (`src/control.py`)  — docs/extension.md §1
-Built on Phase 5 **model (d)**.
+Built on the Phase 5 **main model (d+)-uniform** (`sair.load_main()`).
 1. Add B, knobs u and v; accumulate cost J.
 2. Four strategies: none / block / refute / hybrid.
 3. Grid search u ∈ [0,0.5], v ∈ [0,0.1] → cost heatmap.
@@ -98,9 +107,11 @@ Built on Phase 5 **model (d)**.
 **Check:** S+A+I+B+R = 1; report which strategy is cheapest.
 
 ## Phase 8 — Centrality targeting  (`src/targeting.py`)  — docs/extension.md §2
-Built on Phase 5 **model (d)**. Run on PHEME **and** on a synthetic **Barabási–Albert network** (same k values,
-methods and actions; BA size and m to be chosen and logged). **The BA run is REQUIRED: (d) did not beat (a)
-on AIC in the primary event (Phase 5, D54).**
+Built on the Phase 5 **main model (d+)-uniform**. Run on PHEME and, if confirmed, on a synthetic **Barabási–Albert
+network** (same k values, methods and actions; size and m to be chosen and logged). The BA rule fired for model (d) in
+D54; the new main model beats (a) on CH by 94.7 AIC — open question whether BA is still required.
+Note: with uniform Mult_eff, targeting acts on δ only through P1 (the friends' majority), which is what blocking and
+recruiting change.
 1. Degree, PageRank, betweenness (k=500 sampling), random (15 runs averaged).
 2. For k ∈ {10,25,50,100}: block / recruit / hybrid (k/2 + k/2).
 3. Recompute P1 → Drif1 → δ1 → run SAIR-C; record peak and total reach.

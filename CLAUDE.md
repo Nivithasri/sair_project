@@ -48,14 +48,14 @@ Centrality-Targeted Hybrid Control of Rumour–Correction Competition on Social 
 - `Drif1 = sigmoid((2*P1 - 1) * Mult_eff)`, `Drif2 = 1 - Drif1`.
 - Phase 4: regression sample = sided users (I ∪ A), logistic, class_weight balanced, standardised blocks; Mult_eff = κ·percentile_rank(η) ∈ [0, κ], κ = 2 (fitted in Phase 5); P1 = friends who have taken side I / those who took any side, fallback = global share; 90% degeneracy rule for User_att (judged on has_text & has_emotion users) / Group_att (D39–D44); lnode_inf kept but structurally empty.
 - `delta1(t) = mean Drif1 over users not yet entered in the data`, `delta2 = 1 - delta1` (Eq. 24's binomial reduces to this). P1 uses data friend counts re-weighted by ρ = C_model/C_data (clip [0, 5]) so interventions feed back; recomputed every data bin (1 h) (D45).
-- Source injection: θ·w_s/Σw moves S → I/A at each supporting/denying source tweet (D46). Phase 5 (revised, D50–D56): least squares, bounded Nelder-Mead, 20 starts, seed 42; Euler dt = bin/50; parameters in `results/phase5_params.csv`.
-- **Model (d) SAIR-H** (main model for Phases 6–8, D50): dS = −β·δ1·I·S − α·δ2·A·S, dI = β·δ1·I·S − γ·I, dA = α·δ2·A·S − ε·A, dR = γ·I + ε·A. The corrected Eq. 26 below is kept as model (c); it cannot let I and A grow at the same time (D49).
+- Source injection: θ·w_s/Σw moves S → I/A at each supporting/denying source tweet (D46). Phase 5 (refit, D57–D71): least squares, bounded Nelder-Mead (log space for rates), 20 random starts (seed 42) + cross-model starts, rates ∈ [1e-3, 50], κ ∈ [0, 50], θ, η ∈ [0, 1]; Euler dt = bin/50 halved until rate·dt ≤ 0.025, steps in a numba kernel; checkpointed staged run; parameters in `results/phase5_params.csv`.
+- **SAIR-H** (D50): dS = −β·δ1·I·S − α·δ2·A·S, dI = β·δ1·I·S − γ·I, dA = α·δ2·A·S − ε·A, dR = γ·I + ε·A; "+" variants add the Bass external influence η_I·S, η_A·S (D57). **Main model for Phases 6–8 = (d+)-uniform** (SAIR-H + Bass, network P1, uniform Mult_eff = κ), chosen by best total AIC over the three sets (D69). The corrected Eq. 26 below is kept as model (c); it cannot let I and A grow at the same time (D49). κ, w, α are not identifiable from cumulative curves: do not interpret their values (D60).
 - **Corrected SAIR (paper's Eq. 26 swaps δ1/δ2):**
   - dS = −δ1·I·S − δ2·A·S
   - dI = δ1·I·S − (1−δ1)·I
   - dA = δ2·A·S − (1−δ2)·A
   - dR = (1−δ1)·I + (1−δ2)·A
-- Phases 6–8 use Phase 5 **model (d)** (see the revised PLAN.md). If (d) does not beat (a) on AIC, Phase 8 also runs on a synthetic Barabási–Albert network.
+- Phases 6–8 use the Phase 5 **main model (d+)-uniform** (`sair.load_main()`). The Barabási–Albert rule fired for model (d) in the first revision (D54). The new main model beats (a) on CH by 94.7 AIC, so whether Phase 8 still needs the BA network is an open question for the user.
 - SAIR-C adds B (blocked), knobs u (blocking) and v (correction campaign); cost weights A1=1, c1=c2=2.
 
 ## Coding rules
