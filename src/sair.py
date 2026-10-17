@@ -124,6 +124,15 @@ def euler_step(S, I, A, R, b_i, b_a, g, e, dt, x_i=0.0, x_a=0.0):
             R + (g * I + e * A) * dt, new_i * dt, new_a * dt)
 
 
+def euler_step_c(S, I, A, R, B, b_i, b_a, g, e, dt, x_i, x_a, u, v):
+    """euler_step with the SAIR-C knobs (Phase 7, D73): blocking u moves I -> B, the campaign v moves S -> A.
+    Returns the new state S, I, A, R, B and the inflows into I and A (the campaign counts as an A entry)."""
+    new_i = b_i * I * S + x_i * S
+    new_a = b_a * A * S + x_a * S + v * S
+    return (S - (new_i + new_a) * dt, I + (new_i - g * I - u * I) * dt, A + (new_a - e * A) * dt,
+            R + (g * I + e * A) * dt, B + u * I * dt, new_i * dt, new_a * dt)
+
+
 def to_fit(names, x):
     """Model parameters -> fitting coordinates (log for rates and the half-life)."""
     return np.array([np.log(v) if n in LOG_PARAMS else v for n, v in zip(names, x)], dtype=float)
@@ -242,17 +251,18 @@ def get_context(key):
     return _CONTEXTS[key]
 
 
-def drif1_vector(sc, k, c_i, c_a, I, A, kappa, pop_k, kind, freeze_k=None):
+def drif1_vector(sc, k, c_i, c_a, I, A, kappa, pop_k, kind, freeze_k=None, rho_one=False):
     """Drif1 of every user at update k, and the mask of users not yet entered in the data (D45).
-    freeze_k: data inputs (friend counts, C_data, not-entered mask) are taken at min(k, freeze_k) (forecast, D52)."""
+    freeze_k: data inputs (friend counts, C_data, not-entered mask) are taken at min(k, freeze_k) (forecast, D52).
+    rho_one: rho_I = rho_A = 1, i.e. no model feedback into P1 (Phase 7 feedback test, D73)."""
     kd = k if freeze_k is None else min(k, freeze_k)
     mask = sc["not_entered"][kd]
     if (sc["p1_mode"] or P1_MODE[kind]) == "global":
         p1 = I / (I + A) if I + A > 0 else 0.5
     else:
         N = sc["N"]
-        rho_i = np.clip(c_i * N / sc["c_i_data"][kd], 0, RHO_MAX) if sc["c_i_data"][kd] > 0 else 1.0
-        rho_a = np.clip(c_a * N / sc["c_a_data"][kd], 0, RHO_MAX) if sc["c_a_data"][kd] > 0 else 1.0
+        rho_i = np.clip(c_i * N / sc["c_i_data"][kd], 0, RHO_MAX) if sc["c_i_data"][kd] > 0 and not rho_one else 1.0
+        rho_a = np.clip(c_a * N / sc["c_a_data"][kd], 0, RHO_MAX) if sc["c_a_data"][kd] > 0 and not rho_one else 1.0
         num = rho_i * sc["n_i"][kd]
         den = num + rho_a * sc["n_a"][kd]
         fallback = I / (I + A) if I + A > 0 else 0.5
@@ -268,9 +278,9 @@ def drif1_vector(sc, k, c_i, c_a, I, A, kappa, pop_k, kind, freeze_k=None):
     return np.broadcast_to(sigmoid((2 * p1 - 1) * me), mask.shape), mask
 
 
-def delta_at(sc, k, c_i, c_a, I, A, kappa, pop_k, kind, freeze_k=None):
+def delta_at(sc, k, c_i, c_a, I, A, kappa, pop_k, kind, freeze_k=None, rho_one=False):
     """d1 at update k: mean Drif1 over users not yet entered in the data (D45)."""
-    d1, mask = drif1_vector(sc, k, c_i, c_a, I, A, kappa, pop_k, kind, freeze_k)
+    d1, mask = drif1_vector(sc, k, c_i, c_a, I, A, kappa, pop_k, kind, freeze_k, rho_one)
     return float(d1[mask].mean()) if mask.any() else float(d1.mean())   # plain float for the step loop
 
 
@@ -284,37 +294,52 @@ def pops_for(sc, p):
 # ---------------------------------------------------------------- simulation
 
 @njit(cache=True)
-def _advance(S, I, A, R, c_i, c_a, t, nxt, dt, b_i, b_a, g, e, x_i, x_a, buf, record):
+def _advance(S, I, A, R, B, c_i, c_a, t, nxt, dt, b_i, b_a, g, e, x_i, x_a, u, v, acc, buf, record):
     """Euler steps from event time t to the next event time nxt with constant rates (compiled with numba).
-    Same arithmetic, step rule and order as euler_step in a Python loop, so results are identical.
+    Same arithmetic, step rule and order as euler_step_c in a Python loop, so results are identical.
+    SAIR-C (D73): blocking u (I -> B) and campaign v (S -> A, counted in C_A); u = v = 0 is the Phase 5 model exactly.
+    acc accumulates [integral of I dt, integral of v*S dt, peak I] (left-endpoint sums, consistent with the Euler scheme).
     If record, the state after every intermediate step (not the arrival at nxt) is written to buf rows
-    (t, S, I, A, R, C_I, C_A). Returns the state at nxt and the number of rows written."""
+    (t, S, I, A, R, C_I, C_A, B). Returns the state at nxt and the number of rows written."""
     n = 0
     while True:
         h = min(dt, nxt - t)
         new_i = b_i * I * S + x_i * S
-        new_a = b_a * A * S + x_a * S
-        S, I, A, R = S - (new_i + new_a) * h, I + (new_i - g * I) * h, A + (new_a - e * A) * h, R + (g * I + e * A) * h
+        new_a = b_a * A * S + x_a * S + v * S
+        acc[0] += I * h
+        acc[1] += v * S * h
+        S, I, A, R, B = (S - (new_i + new_a) * h, I + (new_i - g * I - u * I) * h, A + (new_a - e * A) * h,
+                         R + (g * I + e * A) * h, B + u * I * h)
         c_i, c_a = c_i + new_i * h, c_a + new_a * h
+        if I > acc[2]:
+            acc[2] = I
         if nxt - (t + h) < 1e-9:
-            return S, I, A, R, c_i, c_a, n
+            return S, I, A, R, B, c_i, c_a, n
         t = t + h
         if record:
-            buf[n, 0], buf[n, 1], buf[n, 2], buf[n, 3], buf[n, 4], buf[n, 5], buf[n, 6] = t, S, I, A, R, c_i, c_a
+            buf[n, 0], buf[n, 1], buf[n, 2], buf[n, 3], buf[n, 4], buf[n, 5], buf[n, 6], buf[n, 7] = t, S, I, A, R, c_i, c_a, B
             n += 1
 
 
-def simulate(sc, kind, params, dt=None, record=False, end_h=None, freeze_k=None):
+def simulate(sc, kind, params, dt=None, record=False, end_h=None, freeze_k=None, u=0.0, v=0.0, rho_one=False,
+             d1_path=None, extras=None):
     """Run one model (kind in MODELS; params as in NAMES[kind]) up to end_h (default: the set's end).
     Source injections and delta updates happen in Python at event times; the Euler steps between events
     run in the compiled _advance. Returns arrays t, C_I, C_A at the event times (every data bin is one), or,
-    if record, a DataFrame with S, I, A, R, C_I, C_A, d1, d2 and t at every Euler step."""
-    p = dict(zip(NAMES[kind], (float(v) for v in params)))
+    if record, a DataFrame with S, I, A, R, C_I, C_A, d1, d2, t and B at every Euler step.
+    SAIR-C (Phase 7, D73): u = blocking rate (I -> B), v = correction-campaign rate (S -> A, counted in C_A);
+    P1 then uses rho_I = (C_I - B) / C_I,data. rho_one: rho_I = rho_A = 1 (no model feedback); d1_path: use this
+    d1 per data bin instead of computing it (feedback test). extras (a dict) receives D = integral of I dt,
+    E_v = integral of v*S dt, peak I, final S, I, A, R, B, C_I, C_A and the d1 used at every data bin."""
+    p = dict(zip(NAMES[kind], (float(v_) for v_ in params)))
     theta, kappa = p["theta"], p.get("kappa", 0.0)
     x_i, x_a = p.get("eta_I", 0.0), p.get("eta_A", 0.0)
+    u, v = float(u), float(v)
     S, I, A, R = 1.0 - sc["I0"] - sc["A0"], sc["I0"], sc["A0"], 0.0
-    S, I, A, R = float(S), float(I), float(A), float(R)
+    S, I, A, R, B = float(S), float(I), float(A), float(R), 0.0
     c_i, c_a = I, A
+    acc = np.zeros(3)
+    acc[2] = I
     uses_delta = kind not in ("const", "const_plus")
     pops = pops_for(sc, p)
     src_t, src_to_i = sc["src_t"].tolist(), sc["src_to_i"].tolist()
@@ -324,8 +349,8 @@ def simulate(sc, kind, params, dt=None, record=False, end_h=None, freeze_k=None)
     if not uses_delta:
         b_i, b_a, g, e = p["beta"], p["alpha"], p["gamma"], p["eps"]
     j, k_next, d1, t = 0, 0, np.nan, 0.0
-    rows, blocks = [], []
-    empty = np.empty((0, 7))
+    rows, blocks, d1_used = [], [], []
+    empty = np.empty((0, 8))
     while True:
         # events at time t: source injections (D46), then the delta update for this bin (D45)
         while j < len(src_t) and src_t[j] <= t + 1e-9:
@@ -338,16 +363,21 @@ def simulate(sc, kind, params, dt=None, record=False, end_h=None, freeze_k=None)
                 A += move
                 c_a += move
             j += 1
+        acc[2] = max(acc[2], I)
         if k_next < len(upd) and upd[k_next] <= t + 1e-9:
             if uses_delta:
-                d1 = delta_at(sc, k_next, c_i, c_a, I, A, kappa, pops[k_next] if pops is not None else 0.0,
-                              kind, freeze_k)
+                if d1_path is not None:
+                    d1 = float(d1_path[k_next])
+                else:
+                    d1 = delta_at(sc, k_next, c_i - B, c_a, I, A, kappa, pops[k_next] if pops is not None else 0.0,
+                                  kind, freeze_k, rho_one)
+                d1_used.append(d1)
                 if kind in EQ26_KINDS:
                     b_i, b_a, g, e = d1, 1 - d1, 1 - d1, d1
                 else:
                     b_i, b_a, g, e = p["beta"] * d1, p["alpha"] * (1 - d1), p["gamma"], p["eps"]
             k_next += 1
-        rows.append((t, S, I, A, R, c_i, c_a, d1))
+        rows.append((t, S, I, A, R, c_i, c_a, B, d1))
         if record:
             blocks.append(np.array([rows[-1]]))
         if t >= end - 1e-9:
@@ -359,27 +389,34 @@ def simulate(sc, kind, params, dt=None, record=False, end_h=None, freeze_k=None)
             nxt = min(nxt, src_t[j])
         if k_next < len(upd):
             nxt = min(nxt, upd[k_next])
-        buf = np.empty((int((nxt - t) / dt) + 3, 7)) if record else empty
-        S, I, A, R, c_i, c_a, n = _advance(S, I, A, R, c_i, c_a, t, nxt, dt, b_i, b_a, g, e, x_i, x_a, buf, record)
+        buf = np.empty((int((nxt - t) / dt) + 3, 8)) if record else empty
+        S, I, A, R, B, c_i, c_a, n = _advance(S, I, A, R, B, c_i, c_a, t, nxt, dt, b_i, b_a, g, e, x_i, x_a, u, v,
+                                              acc, buf, record)
         if record and n:
             blocks.append(np.column_stack([buf[:n], np.full(n, d1)]))
         t = nxt
+    if extras is not None:
+        extras.update(D=acc[0], E_v=acc[1], peak_I=acc[2], S=S, I=I, A=A, R=R, B=B, C_I=c_i, C_A=c_a,
+                      d1_upd=np.array(d1_used))
     if record:
         out = np.vstack(blocks)
-        return pd.DataFrame(out[:, 1:7], columns=["S", "I", "A", "R", "C_I", "C_A"]).assign(
-            d1=out[:, 7], d2=1 - out[:, 7], t=out[:, 0])
+        return pd.DataFrame(out[:, [1, 2, 3, 4, 5, 6]], columns=["S", "I", "A", "R", "C_I", "C_A"]).assign(
+            d1=out[:, 8], d2=1 - out[:, 8], t=out[:, 0], B=out[:, 7])
     out = np.array(rows)
     return out[:, 0], out[:, 5], out[:, 6]
 
 
-def simulate_python(sc, kind, params, dt=None, record=False, end_h=None, freeze_k=None):
-    """Reference pure-Python Euler loop (kept for the numba equivalence check, D62)."""
-    p = dict(zip(NAMES[kind], (float(v) for v in params)))
+def simulate_python(sc, kind, params, dt=None, record=False, end_h=None, freeze_k=None, u=0.0, v=0.0, rho_one=False,
+                    d1_path=None, extras=None):
+    """Reference pure-Python Euler loop (kept for the numba equivalence check, D62); same arguments as simulate."""
+    p = dict(zip(NAMES[kind], (float(v_) for v_ in params)))
     theta, kappa = p["theta"], p.get("kappa", 0.0)
     x_i, x_a = p.get("eta_I", 0.0), p.get("eta_A", 0.0)
+    u, v = float(u), float(v)
     S, I, A, R = 1.0 - sc["I0"] - sc["A0"], sc["I0"], sc["A0"], 0.0
-    S, I, A, R = float(S), float(I), float(A), float(R)
+    S, I, A, R, B = float(S), float(I), float(A), float(R), 0.0
     c_i, c_a = I, A
+    D, E_v, peak = 0.0, 0.0, I
     uses_delta = kind not in ("const", "const_plus")
     pops = pops_for(sc, p)
     # plain Python floats in the step loop (numpy scalars would make every update ~10x slower)
@@ -390,7 +427,7 @@ def simulate_python(sc, kind, params, dt=None, record=False, end_h=None, freeze_
     if not uses_delta:
         b_i, b_a, g, e = p["beta"], p["alpha"], p["gamma"], p["eps"]
     j, k_next, d1, t = 0, 0, np.nan, 0.0
-    out = []
+    out, d1_used = [], []
     while True:
         # events at time t: source injections (D46), then the delta update for this bin (D45)
         while j < len(src_t) and src_t[j] <= t + 1e-9:
@@ -403,17 +440,22 @@ def simulate_python(sc, kind, params, dt=None, record=False, end_h=None, freeze_
                 A += move
                 c_a += move
             j += 1
+        peak = max(peak, I)
         if k_next < len(upd) and upd[k_next] <= t + 1e-9:
             if uses_delta:
-                d1 = delta_at(sc, k_next, c_i, c_a, I, A, kappa, pops[k_next] if pops is not None else 0.0,
-                              kind, freeze_k)
+                if d1_path is not None:
+                    d1 = float(d1_path[k_next])
+                else:
+                    d1 = delta_at(sc, k_next, c_i - B, c_a, I, A, kappa, pops[k_next] if pops is not None else 0.0,
+                                  kind, freeze_k, rho_one)
+                d1_used.append(d1)
                 if kind in EQ26_KINDS:
                     b_i, b_a, g, e = d1, 1 - d1, 1 - d1, d1
                 else:
                     b_i, b_a, g, e = p["beta"] * d1, p["alpha"] * (1 - d1), p["gamma"], p["eps"]
             k_next += 1
         if record:
-            out.append((t, S, I, A, R, c_i, c_a, d1, 1 - d1))
+            out.append((t, S, I, A, R, c_i, c_a, d1, 1 - d1, B))
         else:
             out.append((t, c_i, c_a))
         if t >= end - 1e-9:
@@ -426,12 +468,18 @@ def simulate_python(sc, kind, params, dt=None, record=False, end_h=None, freeze_
         if k_next < len(upd):
             nxt = min(nxt, upd[k_next])
         h = min(dt, nxt - t)
-        S, I, A, R, gi, ga = euler_step(S, I, A, R, b_i, b_a, g, e, h, x_i, x_a)
+        D += I * h
+        E_v += v * S * h
+        S, I, A, R, B, gi, ga = euler_step_c(S, I, A, R, B, b_i, b_a, g, e, h, x_i, x_a, u, v)
         c_i, c_a = c_i + gi, c_a + ga
+        peak = max(peak, I)
         t = nxt if nxt - (t + h) < 1e-9 else t + h
+    if extras is not None:
+        extras.update(D=D, E_v=E_v, peak_I=peak, S=S, I=I, A=A, R=R, B=B, C_I=c_i, C_A=c_a, d1_upd=np.array(d1_used))
     out = np.array(out)
     if record:
-        return pd.DataFrame(out[:, 1:], columns=["S", "I", "A", "R", "C_I", "C_A", "d1", "d2"]).assign(t=out[:, 0])
+        return pd.DataFrame(out[:, 1:9], columns=["S", "I", "A", "R", "C_I", "C_A", "d1", "d2"]).assign(
+            t=out[:, 0], B=out[:, 9])
     return out[:, 0], out[:, 1], out[:, 2]
 
 

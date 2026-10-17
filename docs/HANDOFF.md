@@ -1,14 +1,14 @@
 # Session handoff — read this first
 
-Last updated: 2026-10-18 (end of session 3: Phases 5–6 done). Latest work commit: `dc97afe`.
-Companion files: `CLAUDE.md` (rules + fixed decisions), `PLAN.md` (phases), `DECISIONS.md` (D1–D72, every
+Last updated: 2026-10-18 (session 4: Phase 7 done). Phase 7 commit: see `git log` (message "Phase 7: SAIR-C control").
+Companion files: `CLAUDE.md` (rules + fixed decisions), `PLAN.md` (phases), `DECISIONS.md` (D1–D75, every
 choice and deviation with numbers), `data/raw/README.md` (data provenance and licences).
 
 ---
 
 ## 0. Summary (start here)
 
-- **Status:** Phases 1–6 done, last commit `dc97afe` (Phase 5 refit + Phase 6). **Phases 7–9 not started.**
+- **Status:** Phases 1–7 done (Phase 7 = SAIR-C, D73–D75). **Phases 8–9 not started.**
 - **Main model for Phases 7–8: (d+)-uniform** = SAIR-H + Bass external influence, network P1, uniform Mult_eff = κ.
   It was chosen as the SAIR-H-family model with the **best total AIC over the three sets (D69)**: total AIC −4295.2,
   BIC −4217.8. Load it with `kind, table = sair.load_main()`.
@@ -20,9 +20,14 @@ choice and deviation with numbers), `data/raw/README.md` (data provenance and li
 - **Caveats:** κ, w and α are **not identifiable**, so do not interpret their values (D60, D70). Recovery of the main model
   is limited by the optimiser (only 1 of 5 seeds reached the noise floor). No model forecasts a later wave before its
   source tweets appear (D71).
-- **Next task:** Phase 7 SAIR-C with event-relative knobs and a Pareto front. **The user pastes the full spec at the
-  start of the new session (§6).** Phase 8 includes the Barabási–Albert network; Phase 9 has the optional extra
-  recovery starts (D72).
+- **Phase 7 result (main model, equal total effort E = 2 / 5 / 10% of N):** the three strategies tie at 2–5% (within
+  ~2 pp of D/D0); at 10% hybrid wins clearly only on CH (D/D0 .016 vs refute .37, block .87), refute is best on SS (.263 vs
+  hybrid .290) and block on the story (.526 vs hybrid .541). **"Hybrid is best" is therefore NOT a general result**; it holds
+  on CH at 10% and in the weighted cost J (which favours hybrids by construction). Feedback: ρ frozen at 1 changes ≈ nothing;
+  the feedback that matters runs through the global-share fallback (d1 frozen: up to 47–70% of the effect at 10% effort on
+  SS / CH refute; 0 on the story where κ = 0). Details §3b, D75.
+- **Next task:** Phase 8 (`src/targeting.py`): centrality-targeted intervention on PHEME **and** a synthetic Barabási–Albert
+  network (D72), main model (d+)-uniform, via P1. Phase 9 has the optional extra recovery starts. **Wait for the user's spec/approval.**
 - **Rules that matter most:** strict honesty, report negative results, never tune to make a model win, never relax the
   leakage rules (§5), log every deviation in `DECISIONS.md`, one phase at a time and then stop, no Claude attribution in git.
 
@@ -81,7 +86,7 @@ the source stance; the **first** support/deny post fixes I or A (no switching); 
 | 4 Drive | `src/drive.py` | **done** | `27e749c`, `04e64ab`, `8b15077` |
 | 5 SAIR fit | `src/sair.py` | **done** (refit: 9 models, Bass term, rate/κ bounds 50, cross-model starts, numba, staged) | `cee4567`, `136a585`, `dc97afe` |
 | 6 Ablation | `src/ablation.py` | **done** (main model + paper-faithful (d+)) | `dc97afe` |
-| 7 SAIR-C | — | not started | — |
+| 7 SAIR-C | `src/control.py` (+ `_advance` / `simulate` extended in `sair.py`) | **done** (D73–D75) | see `git log` |
 | 8 Targeting | — | not started | — |
 | 9 Packaging | — | not started | — |
 
@@ -231,6 +236,24 @@ kept and only the input is knocked out. A negative ΔAIC is possible because the
 
 ---
 
+### Phase 7 — SAIR-C (D73–D75)
+Knobs u = λu·γ, v = λv/T90 (T90: CH 49.8 h, SS 16.5 h, story 2.0 h); ρ_I = (C_I − B)/C_I,data; D = ∫I dt over the window.
+**Best point at equal total effort, D/D0 (block / refute / hybrid), main model, knobs inside the grid:**
+| Set | E = 2% | E = 5% | E = 10% |
+|---|---|---|---|
+| CH | .974 / .970 / .971 | .934 / .930 / **.929** | .865 / .370 / **.016** |
+| SS | .977 / .970 / .974 | .942 / **.918** / .925 | .884 / **.263** / .290 |
+| story | .925 / .923 / .924 | **.800** / .806 / .801 | **.526** / .623 / .541 |
+- Hybrid best only on CH at 10% (blocking tips P1, the campaign recruits A, final C_A .94 vs .02). Ties at 2–5%. Refute-only cannot
+  reach 15% effort on CH / SS and block-only not on the story inside the grid (effort is non-monotone in the knobs, D74).
+- Weighted cost J (w .01 / .05 / .2): cheapest grid point is a hybrid in all sets (CH w .05: λu .5, λv .5, D/D0 .068). J penalises
+  knob size, so this is partly by construction. Robustness: (a+) refute best on CH / SS; (d)-uniform as the main model.
+- Grid Pareto front: 14 (CH), 16 (SS), 15 (story) non-dominated points. Wide search (knobs to 50) only as sensitivity (CH hybrid .002).
+- Feedback share at the best points: ρ = 1 ≈ 0 (≤ 0.5% SS, ≤ 9% CH); d1(t) frozen: CH block 0.3%, refute / hybrid 5–9% (2–5%), 70% refute at 10%;
+  SS 1% / 5–17% / 46–47%; story 0 (κ = 0). The effect runs through the P1 fallback I/(I + A) for users with no sided friends.
+- Checks: λ = 0 == Phase 5 (2.8e-14); sums ≤ 1.3e-13; numba == Python; D monotone on all grid lines; **one dt warning:** SS (λu, λv) = (5, 0),
+  state difference 1.04e-3 (> 1e-3), outcomes D 2.2e-4.
+
 ## 4. Key findings for the write-up
 
 (a) **Text and emotion features are weak.** Only 2–4% of users wrote anything before entering (most enter by
@@ -277,6 +300,9 @@ kept and only the input is knocked out. A negative ΔAIC is possible because the
 | D70 | κ at 50 in the ranked models = a step "follow the sided-friends majority"; κ not widened again |
 | D71 | Forecast limitation: no model forecasts later waves; (d)-uniform unstable on SS; main model ≥ (a) |
 | D72 | Plan for Phases 7–9: event-relative knobs + Pareto front; BA network in Phase 8; optional extra recovery starts in Phase 9 |
+| D73 | SAIR-C model and knobs; campaign counts in C_A; ρ_I uses C_I − B; kernel extended, Phase 5 bitwise unchanged |
+| D74 | Equal-effort search along rays (all roots), grid range primary + wide sensitivity, Pareto, cost J |
+| D75 | Phase 7 results, feedback test (ρ = 1 vs d1 frozen), checks and the SS dt warning |
 
 ---
 
@@ -301,20 +327,14 @@ kept and only the input is knocked out. A negative ΔAIC is possible because the
 
 ---
 
-## 6. NEXT TASK — Phase 7: SAIR-C with event-relative knobs and a Pareto front
+## 6. NEXT TASK — Phase 8: centrality-targeted intervention (`src/targeting.py`, docs/extension.md §2)
 
-**The user will paste the full Phase 7 spec at the start of the new session. Follow that spec exactly. If it has
-not been pasted, ask for it before coding.** What is fixed already (PLAN.md, D72, `docs/extension.md` §1):
-- Model: the main model **(d+)-uniform** with its fitted parameters per set (`sair.load_main()`), plus a blocked state B,
-  knob u (blocking, I → B) and knob v (correction campaign, S → A); invariant S + I + A + B + R = 1.
-- **Event-relative knobs:** u and v are scaled to each event's own fitted rates / timescale, not fixed absolute values
-  (the old grid u ≤ 0.5, v ≤ 0.1 per hour does not fit rates like CH α = 13 /h). The exact scaling comes from the spec.
-- **Pareto front** of damage against control effort, instead of a single weighted cost (the DR-DB cost J with
-  A1 = 1, c1 = c2 = 2 may still be reported).
-- With a uniform Mult_eff, interventions act on δ only through P1 (the friends' majority, ρ-feedback, D45), plus the
-  injection and Bass terms. Report this mechanism honestly.
-- Reuse: `sair.get_context(key)`, `sair.simulate`; keep the numba kernel's exactness (extend `_advance` for the new
-  terms and assert equality with a Python reference, as in D62).
+**Wait for the user's spec.** Fixed so far (PLAN.md, D72): main model (d+)-uniform; PHEME graph **and** a synthetic Barabási–Albert
+network (size and m to be chosen and logged); methods degree / PageRank / betweenness (k = 500 sampling) / random (15 runs averaged);
+k ∈ {10, 25, 50, 100}; block / recruit / hybrid. With uniform Mult_eff, targeting acts on δ only through P1 (friends' majority).
+Lessons from Phase 7: δ responds to interventions mainly through the fallback share I/(I + A) and, on the story, not at all (κ = 0);
+effort is not monotone in the knobs; "hybrid is best" did not hold generally at equal effort. Reuse: `control.run_point`, `sair.simulate`
+(`u`, `v`, `rho_one`, `d1_path`, `extras` arguments), `control.run_jobs` pattern for checkpointed parallel runs.
 
 ---
 
@@ -331,6 +351,7 @@ Set `LOKY_MAX_CPU_COUNT=4` to silence a harmless joblib warning on Windows (`[Wi
 | 4 | `python src/drive.py --check` | ~30 s | `data/processed/{drive,drive_model,friends}_<set>[_followgroups].*`, `results/phase4_*` |
 | 5 | `python src/sair.py --check` (stage 1 then 2) · `--stage 1\|2 --check` · `--fresh` (drop the stages' checkpoints) · `--check-only` | from scratch ~6–8 h on 12 cores; from checkpoints minutes | `results/phase5_*.csv`, `phase5_plot1/2/2b/2c_*.png`, `data/processed/model_curves_<set>.csv` (main model) |
 | 6 | `python src/ablation.py --check` (`--check-only`) | ~1.5–2 h from scratch (refits checkpointed) | `results/phase6_*.csv`, `phase6_plot3*_*.png`, `data/processed/ablation_edges_<set>.csv` |
+| 7 | `python src/control.py --check` (`--stage 1\|2`, `--fresh`, `--check-only`) | ~2.5 min stage 1 (147 jobs, 12 workers, checkpointed), seconds for stage 2 | `results/phase7_{grid,strategies,feedback,cost}.csv`, `phase7_plot4/5/5b_*.png` |
 
 - `<set>` ∈ {charliehebdo, sydneysiege, story_three_shootings}.
 - The pipeline is deterministic (seed 42; two full runs gave byte-identical outputs).
@@ -353,5 +374,4 @@ Each module runs its own phase check with `--check`. Every phase check must pass
 
 ## 8. Open decisions
 
-None blocking. Resolved at the end of session 3 (D72): the BA network stays in Phase 8; the extra recovery starts are
-optional in Phase 9; the Phase 7 knobs are event-relative (spec pasted by the user).
+None blocking. For Phase 8: BA network size and m; whether to also repeat the feedback test there.

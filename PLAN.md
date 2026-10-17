@@ -1,7 +1,7 @@
 # Implementation Phase Plan
 
 Each phase: plan → code → run check → show results → stop for approval.
-**Status:** Phases 1–6 done (last commit `dc97afe`; Phase 5 refit D57–D71, Phase 6 D67). Phases 7–9 not started.
+**Status:** Phases 1–7 done (Phase 5 refit D57–D71, Phase 6 D67, Phase 7 D73–D75). Phases 8–9 not started.
 Main model for Phases 6–8: **(d+)-uniform** (D69). Plan for 7–9: D72.
 See `docs/HANDOFF.md` for results and findings.
 Equations and definitions live in `docs/SAIR_paper.md` and `docs/extension.md`.
@@ -98,16 +98,19 @@ Main model (d+)-uniform and, as the paper-faithful ablation, (d+) (ranked Mult_e
 **Check:** sums = 1 for every variant; the full model reproduces the Phase 5 fit exactly; each knock-out changes only its
 intended input; rank knock-outs have no effect on uniform-Mult_eff models.
 
-## Phase 7 — SAIR-C  (`src/control.py`)  — docs/extension.md §1
-Built on the Phase 5 **main model (d+)-uniform** (`sair.load_main()`), per set with its fitted parameters.
-**The exact spec is pasted by the user at the start of the session (D72).** Fixed so far:
-1. Add the blocked state B, knob u (blocking, I → B) and knob v (correction campaign, S → A); S + I + A + B + R = 1.
-2. **Event-relative knobs:** u and v scaled to each event's fitted rates / timescale (not one absolute grid).
-3. **Pareto front** of damage (e.g. rumour reach / peak) vs control effort, per event; fixed strategies none / block /
-   refute / hybrid placed on it. The DR-DB cost J (A1 = 1, c1 = c2 = 2) may be reported as one point of view.
-4. Feedback through P1 (ρ-feedback, D45): with a uniform Mult_eff this is the only route by which interventions change δ.
+## Phase 7 — SAIR-C  (`src/control.py`)  — docs/extension.md §1  ✅ DONE (D73–D75)
+Main model (d+)-uniform, per set with its fitted parameters; `sair._advance` / `simulate` extended (bitwise unchanged at u = v = 0).
+1. Blocked state B, knobs u (I → B) and v (S → A, counted in C_A), constant from t = 0; ρ_I = (C_I − B)/C_I,data in P1.
+2. Event-relative knobs: u = λu·γ (λu ∈ {0, .25, .5, 1, 2, 3, 5}), v = λv/T90 (λv ∈ {0, .1, .25, .5, 1, 1.5, 2}).
+3. Outcomes: D = ∫I dt and D/D0, peak, final C_I, C_A, B, efforts E_u = ∫u·I, E_v = ∫v·S.
+4. Strategies none / block / refute / hybrid compared at equal total effort E = 2 / 5 / 10% of N (all roots of E = budget along rays,
+   knobs inside the grid; wide search as sensitivity); Pareto front of D/D0 vs E; weighted cost J, w ∈ {.01, .05, .2}.
+5. Feedback test (ρ frozen at 1; d1(t) frozen to the no-control path) and robustness with (a+) and (d)-uniform.
 
-**Output / check:** per the spec; at least S + I + A + B + R = 1, numba kernel == Python reference, plots + CSVs.
+**Output:** `results/phase7_grid.csv`, `phase7_strategies.csv`, `phase7_feedback.csv`, `phase7_cost.csv`; Plot 4 (`phase7_plot4_strategies.png`),
+Plot 5 (`phase7_plot5_heatmap.png`), Plot 5b (`phase7_plot5b_pareto.png`); checkpoint `data/processed/checkpoints/phase7_stage1.jsonl`.
+**Check:** `python src/control.py --check-only`: docs worked step, λ = 0 == Phase 5 curves, S+I+A+R+B = 1, states in [0, 1], numba == Python,
+dt vs dt/2, equal-effort points at the budget, D monotone along grid lines (reported).
 
 ## Phase 8 — Centrality targeting  (`src/targeting.py`)  — docs/extension.md §2
 Built on the Phase 5 **main model (d+)-uniform**. Runs on PHEME **and on a synthetic Barabási–Albert network** (D72;
