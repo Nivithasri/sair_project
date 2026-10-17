@@ -14,7 +14,12 @@ Centrality-Targeted Hybrid Control of Rumour–Correction Competition on Social 
 - **Never relax the leakage rules to match the paper** (own pre-entry text only, timestamped friend power,
   profile-only groups, follow-only PageRank, single-feature AUC ≤ 0.95; see HANDOFF §5).
 - **Never tune the setup to force a model to win.** Same loss, data, injection and optimiser for every compared model.
-- **Report negative results** prominently (e.g. D49: the full model loses to constant-rate SAIR).
+- **Report negative results** prominently (e.g. D49: Eq. 26 loses to constant-rate SAIR; D67: the paper's per-user
+  factors are not supported, Fig. 7 does not match).
+- **A bound must never decide a verdict**; flag every parameter at a bound. **A model must never fit worse than its own
+  submodel**: use the cross-model starts and the SSE-order check (D64).
+- **Long runs are checkpointed and staged** (`--stage`, D62): log progress with an ETA, report after each stage, and
+  resume from checkpoints after a crash.
 - **Every deviation from the paper or the plan is logged in `DECISIONS.md`** with the reason and the numbers.
 - **One phase at a time, then stop** for approval.
 - **Detailed final report per phase** (steps, files, check output, tables, observations, problems and fixes,
@@ -55,11 +60,11 @@ Centrality-Targeted Hybrid Control of Rumour–Correction Competition on Social 
   - dI = δ1·I·S − (1−δ1)·I
   - dA = δ2·A·S − (1−δ2)·A
   - dR = (1−δ1)·I + (1−δ2)·A
-- Phases 6–8 use the Phase 5 **main model (d+)-uniform** (`sair.load_main()`). The Barabási–Albert rule fired for model (d) in the first revision (D54). The new main model beats (a) on CH by 94.7 AIC, so whether Phase 8 still needs the BA network is an open question for the user.
-- SAIR-C adds B (blocked), knobs u (blocking) and v (correction campaign); cost weights A1=1, c1=c2=2.
+- Phases 6–8 use the Phase 5 **main model (d+)-uniform** (`sair.load_main()`). Phase 7 = SAIR-C with event-relative knobs and a Pareto front (spec pasted by the user); Phase 8 also runs on a synthetic Barabási–Albert network (D72).
+- SAIR-C adds B (blocked), knobs u (blocking) and v (correction campaign), scaled per event (event-relative, D72); DR-DB cost weights A1=1, c1=c2=2 for the cost J.
 
 ## Coding rules
-- Python 3, networkx, numpy, pandas, scipy, scikit-learn, matplotlib. Add only what is needed.
+- Python 3, networkx, numpy, pandas, scipy, scikit-learn, matplotlib, numba (Euler kernel, D62). Add only what is needed.
 - One file per concern in `src/` (see `PLAN.md`). Plain functions, simple readable code, no class hierarchies or over-engineering.
 - Every phase has a check (asserts or a small script). **Run it before saying a phase is done.**
 - Invariants: population fractions sum to 1 at every step (±1e-9); all probabilities in [0, 1].

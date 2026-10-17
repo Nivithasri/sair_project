@@ -1,8 +1,30 @@
 # Session handoff — read this first
 
-Last updated: 2026-10-18 (session 3: Phase 5 refit and Phase 6 done). Previous commits: `8128a85` (handoff), `136a585` (revision).
-Companion files: `CLAUDE.md` (rules + fixed decisions), `PLAN.md` (phases), `DECISIONS.md` (D1–D71, every
+Last updated: 2026-10-18 (end of session 3: Phases 5–6 done). Latest work commit: `dc97afe`.
+Companion files: `CLAUDE.md` (rules + fixed decisions), `PLAN.md` (phases), `DECISIONS.md` (D1–D72, every
 choice and deviation with numbers), `data/raw/README.md` (data provenance and licences).
+
+---
+
+## 0. Summary (start here)
+
+- **Status:** Phases 1–6 done, last commit `dc97afe` (Phase 5 refit + Phase 6). **Phases 7–9 not started.**
+- **Main model for Phases 7–8: (d+)-uniform** = SAIR-H + Bass external influence, network P1, uniform Mult_eff = κ.
+  It was chosen as the SAIR-H-family model with the **best total AIC over the three sets (D69)**: total AIC −4295.2,
+  BIC −4217.8. Load it with `kind, table = sair.load_main()`.
+- **What the data support:** SAIR-H contact and removal rates, source injection, the Bass term (decisive on Sydney and
+  the story) and network P1 as a "follow the sided-friends majority" rule (CH). **Not supported:** the paper's Eq. 26 (I
+  and A can never grow together, D49), the per-user regression ranking, and its factors (emotion, popularity, content
+  fit, connectivity, friend power).
+- **Paper claims:** Fig. 7 does **not** match; Fig. 8 **partly**; Fig. 6 **partly at most** (§3, Phase 6).
+- **Caveats:** κ, w and α are **not identifiable**, so do not interpret their values (D60, D70). Recovery of the main model
+  is limited by the optimiser (only 1 of 5 seeds reached the noise floor). No model forecasts a later wave before its
+  source tweets appear (D71).
+- **Next task:** Phase 7 SAIR-C with event-relative knobs and a Pareto front. **The user pastes the full spec at the
+  start of the new session (§6).** Phase 8 includes the Barabási–Albert network; Phase 9 has the optional extra
+  recovery starts (D72).
+- **Rules that matter most:** strict honesty, report negative results, never tune to make a model win, never relax the
+  leakage rules (§5), log every deviation in `DECISIONS.md`, one phase at a time and then stop, no Claude attribution in git.
 
 ---
 
@@ -57,8 +79,8 @@ the source stance; the **first** support/deny post fixes I or A (no switching); 
 | 2 Features | `src/features.py` | **done** | `364c879`, `7f808be`, `04e64ab` |
 | 3 Network | `src/network.py` | **done** | `6f5ec07`, `b668911`, `8b15077` |
 | 4 Drive | `src/drive.py` | **done** | `27e749c`, `04e64ab`, `8b15077` |
-| 5 SAIR fit | `src/sair.py` | **done (refit: 9 models, Bass term, rate/κ bounds 50, cross-model starts, numba, staged)** | `cee4567`, `136a585`, refit commit after it |
-| 6 Ablation | `src/ablation.py` | **done** (main model + paper-faithful (d+)) | same commit as the Phase 5 refit |
+| 5 SAIR fit | `src/sair.py` | **done** (refit: 9 models, Bass term, rate/κ bounds 50, cross-model starts, numba, staged) | `cee4567`, `136a585`, `dc97afe` |
+| 6 Ablation | `src/ablation.py` | **done** (main model + paper-faithful (d+)) | `dc97afe` |
 | 7 SAIR-C | — | not started | — |
 | 8 Targeting | — | not started | — |
 | 9 Packaging | — | not started | — |
@@ -125,6 +147,25 @@ they were up to 0.741 (SS Gpre), which was the leak that motivated the switch.
   CH 0.428 (12 threads, 2,284 users), SS 0.491 (14, 2,069), story 0.427 (2, 707).**
 - Mult_eff = κ × percentile rank of η (mean ≈ 1.0 at κ = 2). Worked example: Mult_eff 2, P1 0.8 → Drif1 0.7685.
 
+### Main model: (d+)-uniform (D57, D66, D69)
+```
+dS = −β·δ1·I·S − α·δ2·A·S − (η_I + η_A)·S
+dI =  β·δ1·I·S + η_I·S − γ·I
+dA =  α·δ2·A·S + η_A·S − ε·A
+dR =  γ·I + ε·A
+δ1 = mean over not-yet-entered users of sigmoid(κ·(2·P1_i − 1)),  δ2 = 1 − δ1
+P1_i = friends' I share (data friend counts re-weighted by ρ = C_model / C_data, D45); source injection θ (D46)
+```
+Uniform Mult_eff: every user's push uses the same κ, so the per-user factors do not enter δ. Fitted parameters (rates /h):
+
+| Set | β | α | γ | ε | κ | θ | η_I | η_A | AIC | at a bound |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Charlie Hebdo | 0.0874 | 13.01 | 0.0437 | 0.0554 | 12.48 | 0.318 | 0.00055 | 0 | −1657.7 | η_I, η_A low |
+| Sydney Siege | 0.490 | 21.06 | 0.677 | 1.645 | 2.88 | 0.319 | 0.0449 | 0.0015 | −684.7 | η_A low |
+| Ottawa story | 40.0 | 32.54 | 14.92 | 4.997 | ≈ 0 | 0.067 | 0.1034 | 0.0290 | −1952.8 | κ low |
+
+On the story κ = 0, so the model reduces to (a+) with β/2 and α/2. Main-rule table: `results/phase5_main_model_rule.csv`.
+
 ### Phase 5 — refit (D57–D71)
 Least squares on C_I/final and C_A/final; rates ∈ [1e-3, 50], κ ∈ [0, 50], w ∈ [0.5, 168], θ, η ∈ [0, 1]; 20 random starts
 (25 for the main candidates) + cross-model starts (D64); dt = bin/50 halved until rate·dt ≤ 0.025 (numba kernel, D62).
@@ -154,12 +195,39 @@ Full table: `results/phase5_model_comparison.csv`; rule table: `phase5_main_mode
 - Ranked models sit at κ = 50 on CH: effectively a step "follow the sided-friends majority" (D70).
 
 ### Phase 6 — ablation (D67)
-Main model (d+)-uniform: refit ΔAIC (CH / SS / story) network **+95.9** / −1.2 / 0.0; injection +305 / +184 / +71;
-Bass −3.8 / **+226** / **+81**; the five per-user factors have no effect by construction (uniform Mult_eff).
-Paper-faithful (d+): emotion +6.2 / +0.1 / 0; popularity **−38.6** / −0.8 / −2.0; content fit ~0; connectivity −24.6 / −4.9 / 0;
-friend power −10.3 / +0.4 / 0 (negative = fits better without the factor); held-fixed peak changes ≤ 1%.
-Fig. 8: strong layer pushes harder on CH only (+0.035); Gact correlation follows the regression sign; Gpre none.
-Fig. 6 (CH): own-trait share 0.45 → 0.19 in the only two windows with ≥ 10 A users; external dominates.
+Refit ΔAIC = AIC(knock-out refit) − AIC(full); positive = the factor is needed. Held fixed = the fitted parameters are
+kept and only the input is knocked out. A negative ΔAIC is possible because the input knock-outs are not nested.
+
+**Main model (d+)-uniform: which components matter**
+| Knock-out | ΔAIC CH | ΔAIC SS | ΔAIC story | Held-fixed rumour peak (CH / SS / story) |
+|---|---|---|---|---|
+| Network P1 → global share | **+95.9** | −1.2 | 0.0 | +0.6% / +0.1% / 0 (CH final C_A → 39% of data) |
+| Source injection θ = 0 | **+305.4** | **+184.3** | **+70.9** | −52% / −59% / −34% |
+| Bass external η = 0 | −3.8 | **+226.0** | **+80.8** | −1% / −26% / −17% |
+| Emotion, popularity, content fit, connectivity, friend power | 0 | 0 | 0 | no effect by construction (uniform Mult_eff) |
+
+**Paper-faithful (d+) (ranked Mult_eff): the paper's factors**
+| Knock-out | ΔAIC CH | ΔAIC SS | ΔAIC story | Held-fixed peak (CH / SS) |
+|---|---|---|---|---|
+| Emotion (S_emo = 1) | +6.2 | +0.1 | 0 | +0.1% / −0.4% |
+| Popularity (Pop = 1) | **−38.6** | −0.8 | −2.0 | +0.9% / −0.6% |
+| Content fit (Info_match = 1) | −0.1 | 0 | 0 | 0 / 0 |
+| Connectivity (co = 1) | **−24.6** | −4.9 | 0 | +0.9% / +1.0% |
+| Friend power (fp = 1) | **−10.3** | +0.4 | 0 | +0.4% / 0 |
+| Network | +21.1 | −2.5 | 0 | +0.3% / +0.1% |
+| Injection | +430.4 | +134.0 | +113.2 | −36% / −62% |
+| Bass | +4.7 | +223.8 | +70.0 | −15% / −24% |
+(On the story κ = 0, so the per-user factors have no effect.) (d)-uniform, the secondary row, is in the same CSVs.
+
+**Paper claims vs our results**
+| Paper claim | Our result | Verdict |
+|---|---|---|
+| Fig. 7: no popularity → the push never peaks | Peak ±0.9%; refit is *better* without popularity (CH −38.6) | **Does not match** (User_att weight ≈ 0 in Phase 4) |
+| Fig. 7: no emotion → much lower peak | ≤ 0.4%; +6.2 AIC on CH only | **Does not match** (weak text features, D31) |
+| Fig. 7: no content fit / connectivity / friend power → lower, later peak | ≤ 1%, partly the opposite direction; refit better without them | **Does not match** (Info_match ≈ 0; regression near noise) |
+| Fig. 8: the strong layer pushes harder | (d+) CH +0.035 (strong higher in 100% of bins); SS −0.008; story only at κ = 2 | **Partly** |
+| Fig. 8: push rises with group activity / preference | Gact ρ: CH −0.43, SS +0.81, story +0.83 (sign = the Phase 4 Group_att coefficient); Gpre: no relation | **Partly / does not match** (regression artefact) |
+| Fig. 6: own traits early, external later | CH own-trait share 0.45 → 0.19 in the only two windows with ≥ 10 A users; external dominates throughout | **Partly at most** |
 
 ---
 
@@ -189,6 +257,29 @@ Fig. 6 (CH): own-trait share 0.45 → 0.19 in the only two windows with ≥ 10 A
 
 ---
 
+## 4b. Decisions taken in session 3 (2026-10-17/18; full text in DECISIONS.md)
+
+| # | Decision |
+|---|---|
+| D57 | Bass external-influence term η_I·S, η_A·S (η ∈ [0, 1]); variants (a+), (d+), (d+)-uniform |
+| D58 | Rate bounds [1e-3, 50] for every model; Euler dt = bin/50, halved until rate·dt ≤ 0.025 |
+| D59 | Forecast cut = max(50% point of C_I, 10th bin), N/A if < 5 bins remain; moving-block bootstrap (5 bins, 50 resamples) + cold-start check |
+| D60 | Recovery for the main model; **κ, w and α are not identifiable, so their values must not be interpreted** |
+| D61 | (Superseded) main = (d) or (d+) by CH AIC |
+| D62 | numba Euler kernel (bitwise identical to Python); per-job checkpoints; staged run with progress / ETA logging |
+| D63 | Stage 2 validates (a), (a+) and the main model (+ (d)-uniform as a secondary row) |
+| D64 | Cross-model starts (up: exact embeddings; down: projections; flattened-ranking seeds); new check that no model fits worse than its submodel |
+| D65 | κ widened to [0, 50]; restarts from the κ ≤ 10 endpoints + 5 fresh starts per main candidate |
+| D66 | (Superseded) (d+)-uniform variant added; main = CH-AIC-best among the four SAIR-H models → (d)-uniform |
+| D67 | Phase 6 ablation: main model + paper-faithful (d+); held-fixed and refit ΔAIC; Fig. 6 / 8 tests |
+| D68 | Phase 5 refit results (model contest, forecast, recovery, bootstrap) |
+| D69 | **Final main-model rule: best total AIC over the three sets → (d+)-uniform** |
+| D70 | κ at 50 in the ranked models = a step "follow the sided-friends majority"; κ not widened again |
+| D71 | Forecast limitation: no model forecasts later waves; (d)-uniform unstable on SS; main model ≥ (a) |
+| D72 | Plan for Phases 7–9: event-relative knobs + Pareto front; BA network in Phase 8; optional extra recovery starts in Phase 9 |
+
+---
+
 ## 5. Leakage fixes made (keep all of them)
 
 | Fix | Why | Decision |
@@ -210,12 +301,20 @@ Fig. 6 (CH): own-trait share 0.45 → 0.19 in the only two windows with ≥ 10 A
 
 ---
 
-## 6. NEXT TASK — Phase 7 (SAIR-C), after the user approves Phases 5–6
+## 6. NEXT TASK — Phase 7: SAIR-C with event-relative knobs and a Pareto front
 
-Use the main model **(d+)-uniform** (`sair.load_main()` → kind and fitted table; `sair.simulate(sc, kind, params)`).
-Add B, the knobs u (blocking) and v (correction campaign) and the cost J (`docs/extension.md` §1, SAIR-H rates). With a
-uniform Mult_eff, interventions act on δ only through P1 (the friends' majority, via ρ-feedback, D45), plus the Bass
-and injection terms. Decide the open questions in §8 first.
+**The user will paste the full Phase 7 spec at the start of the new session. Follow that spec exactly. If it has
+not been pasted, ask for it before coding.** What is fixed already (PLAN.md, D72, `docs/extension.md` §1):
+- Model: the main model **(d+)-uniform** with its fitted parameters per set (`sair.load_main()`), plus a blocked state B,
+  knob u (blocking, I → B) and knob v (correction campaign, S → A); invariant S + I + A + B + R = 1.
+- **Event-relative knobs:** u and v are scaled to each event's own fitted rates / timescale, not fixed absolute values
+  (the old grid u ≤ 0.5, v ≤ 0.1 per hour does not fit rates like CH α = 13 /h). The exact scaling comes from the spec.
+- **Pareto front** of damage against control effort, instead of a single weighted cost (the DR-DB cost J with
+  A1 = 1, c1 = c2 = 2 may still be reported).
+- With a uniform Mult_eff, interventions act on δ only through P1 (the friends' majority, ρ-feedback, D45), plus the
+  injection and Bass terms. Report this mechanism honestly.
+- Reuse: `sair.get_context(key)`, `sair.simulate`; keep the numba kernel's exactness (extend `_advance` for the new
+  terms and assert equality with a Python reference, as in D62).
 
 ---
 
@@ -243,15 +342,16 @@ Set `LOKY_MAX_CPU_COUNT=4` to silence a harmless joblib warning on Windows (`[Wi
 - Checkpoints (`data/processed/checkpoints/`): after any change to the setup use `--fresh` or delete the affected files.
   Jobs built from fitted values carry a fingerprint and rerun automatically if that fit changes.
 
+Phase 5 stages: **Stage 1** = all model fits (`--stage 1`), **Stage 2** = validation of (a), (a+), the main model and
+(d)-uniform (`--stage 2`); without `--stage` both run in order. **Stage 3** = Phase 6 (`python src/ablation.py --check`).
+A run that is interrupted resumes from its checkpoints (a crash and a system restart were both recovered this way).
+Monitor progress in the log: every job prints done / total, elapsed and ETA.
+
 Each module runs its own phase check with `--check`. Every phase check must pass before a commit.
 
 ---
 
 ## 8. Open decisions
 
-1. **Barabási–Albert network in Phase 8:** the rule fired for (d) in the first revision (D54); the main model now beats
-   (a) on CH by 94.7 AIC. Keep the BA run (robustness for targeting) or drop it?
-2. **Recovery of the main model:** only 1 of 5 seeds reached the noise floor with 10 random starts. More starts (or
-   cross-model seeding) would separate optimiser failure from non-identifiability, at several hours of compute.
-3. Phase 7 knob ranges (u ≤ 0.5, v ≤ 0.1 per hour) were set for the old rates; with the fitted SAIR-H rates (e.g. CH
-   α = 13 /h) they may need rescaling. Decide before Phase 7.
+None blocking. Resolved at the end of session 3 (D72): the BA network stays in Phase 8; the extra recovery starts are
+optional in Phase 9; the Phase 7 knobs are event-relative (spec pasted by the user).
