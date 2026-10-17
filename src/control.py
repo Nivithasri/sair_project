@@ -44,6 +44,7 @@ SECOND = ["const_plus", "sairh_uniform"]            # robustness models (a+) and
 STRAT = ["block", "refute", "hybrid"]
 STRAT_COLOR = {"none": "#6b6b6b", "block": "#0072B2", "refute": "#E69F00", "hybrid": "#009E73"}
 STRAT_LABEL = {"none": "no control", "block": "block only", "refute": "refute only", "hybrid": "hybrid"}
+DT_DIV = {"sydneysiege": 2}                         # finer Euler step where dt vs dt/2 failed at the largest knob (D76)
 CKPT = os.path.join(sair.CKPT_DIR, "phase7_stage1.jsonl")
 OUT = {n: os.path.join(dp.RESULTS, f"phase7_{n}.csv") for n in ("grid", "strategies", "feedback", "cost")}
 
@@ -53,8 +54,18 @@ OUT = {n: os.path.join(dp.RESULTS, f"phase7_{n}.csv") for n in ("grid", "strateg
 _SETUP = {}
 
 
-def setup(key, kind):
-    """Context, fitted parameters, gamma and T90 of one set and model."""
+_VARIANT = {}                                      # tag -> (context key, parameter vector): refits / model variants (D76)
+
+
+def setup(key, kind, tag=None):
+    """Context, fitted parameters, gamma and T90 of one set and model (tag = a registered variant, e.g. a kappa-fixed refit)."""
+    if tag is not None:
+        if (key, kind, tag) not in _SETUP:
+            ctx_key, x = _VARIANT[tag]
+            sc = sair.get_context(ctx_key)
+            _SETUP[(key, kind, tag)] = (sc, np.asarray(x, dtype=float), dict(zip(sair.NAMES[kind], x))["gamma"],
+                                        float(np.interp(0.9, sc["C_I"] / sc["fin_I"], sc["grid"])))
+        return _SETUP[(key, kind, tag)]
     if (key, kind) not in _SETUP:
         table = pd.read_csv(os.path.join(dp.RESULTS, "phase5_params.csv"))
         x = sair.params_of(table[(table["set"] == key) & (table["model"] == kind)].iloc[0], kind)
@@ -64,21 +75,19 @@ def setup(key, kind):
     return _SETUP[(key, kind)]
 
 
-def knobs(key, kind, lu, lv):
-    _, _, gamma, t90 = setup(key, kind)
+def knobs(key, kind, lu, lv, tag=None):
+    _, _, gamma, t90 = setup(key, kind, tag)
     return lu * gamma, lv / t90
 
 
-def run_point(key, kind, lu, lv, mode="fb", d1_path=None, record=False, halve=1):
+def run_point(key, kind, lu, lv, mode="fb", d1_path=None, record=False, halve=1, div=None, tag=None):
     """One SAIR-C run. mode: 'fb' = network feedback as fitted, 'rho1' = rho frozen at 1, 'dfix' = d1(t) frozen to d1_path.
-    dt = the Phase 5 step, halved until max(u, v) * dt <= 0.025 (so lam = 0 uses exactly the Phase 5 step); halve = extra
-    halvings for the dt-convergence check. Returns the outcome dict (and the DataFrame if record)."""
-    sc, x, _, _ = setup(key, kind)
-    u, v = knobs(key, kind, lu, lv)
-    dt = sair.step_dt(sc, kind, x)
-    while max(u, v) * dt > sair.RATE_STEP:
-        dt /= 2
-    dt /= halve
+    dt = the Phase 5 step (u, v in the largest-rate rule) divided by DT_DIV[set] (D76: Sydney runs at dt/2 because its
+    lam_u = 5 point is a sharp tipping point); div = 1 gives exactly the Phase 5 step; halve = extra halvings for the
+    dt-convergence check. Returns the outcome dict (and the DataFrame if record)."""
+    sc, x, _, _ = setup(key, kind, tag)
+    u, v = knobs(key, kind, lu, lv, tag)
+    dt = sair.step_dt(sc, kind, x, u, v) / (DT_DIV.get(key, 1) if div is None else div) / halve
     ex = {}
     res = sair.simulate(sc, kind, x, record=record, dt=dt, u=u, v=v, extras=ex, rho_one=(mode == "rho1"),
                         d1_path=d1_path if mode == "dfix" else None)
@@ -110,9 +119,13 @@ def grid_job(args):
 def ray_job(args):
     """Equal-effort search along one ray (lam_u, lam_v) = r * (a, b): scan r on a log grid, then bisect every crossing of
     each effort budget (the effort is not monotone in r for blocking, so there can be two roots; D is evaluated at all)."""
-    key, kind, name, a, b, cap_u, cap_v = args
+    key, kind, name, a, b, cap_u, cap_v = args[:7]
+    tag = None
+    if len(args) > 7:                                   # variant: (tag, context key, parameters)
+        tag = args[7]
+        _VARIANT[tag] = (args[8], args[9])
     rs = np.geomspace(R_MIN, min(cap_u / a if a else np.inf, cap_v / b if b else np.inf), N_SCAN)
-    scan = [run_point(key, kind, r * a, r * b) for r in rs]
+    scan = [run_point(key, kind, r * a, r * b, tag=tag) for r in rs]
     e = np.array([s["E_total"] for s in scan])
     rows = [{"set": key, "model": kind, "ray": name, "kind": "scan", "budget": np.nan, "root": -1, "r": float(r),
              **clean(s)} for r, s in zip(rs, scan)]
@@ -127,7 +140,7 @@ def ray_job(args):
             r_best = rs[i] if abs(f0) <= abs(f1) else rs[i + 1]
             for _ in range(40):
                 mid = 0.5 * (lo + hi)
-                s = run_point(key, kind, np.exp(mid) * a, np.exp(mid) * b)
+                s = run_point(key, kind, np.exp(mid) * a, np.exp(mid) * b, tag=tag)
                 if abs(s["E_total"] - bud) < abs(best["E_total"] - bud):
                     best, r_best = s, float(np.exp(mid))
                 if abs(s["E_total"] - bud) < 1e-6:
@@ -142,12 +155,13 @@ def ray_job(args):
     return rows
 
 
-def run_jobs(pool, jobs, fn_name, label):
+def run_jobs(pool, jobs, fn_name, label, ckpt=None):
     """Run (id, args) jobs in the pool; every finished job is appended to the checkpoint (restart-safe) with ETA logging."""
     os.makedirs(sair.CKPT_DIR, exist_ok=True)
     done = {}
-    if os.path.exists(CKPT):
-        for line in open(CKPT):
+    ckpt = ckpt or CKPT
+    if os.path.exists(ckpt):
+        for line in open(ckpt):
             r = json.loads(line)
             done[r["id"]] = r["rows"]
     todo = [(i, a) for i, a in jobs if i not in done]
@@ -157,7 +171,7 @@ def run_jobs(pool, jobs, fn_name, label):
     for n, f in enumerate(as_completed(futures), 1):
         rows = f.result()
         done[futures[f]] = rows
-        with open(CKPT, "a") as fh:
+        with open(ckpt, "a") as fh:
             fh.write(json.dumps({"id": futures[f], "rows": rows}) + "\n")
         el = time.time() - t0
         print(f"[{label}] {n}/{len(todo)} done  {futures[f]}  elapsed {el:.0f} s  ETA {el / n * (len(todo) - n):.0f} s",
@@ -410,7 +424,108 @@ def report(g, cost, strat, fbk, main):
     print(f.pivot_table(index=["range", "set", "budget", "strategy"], columns="frozen", values=["effect_feedback", "effect_frozen", "feedback_share"]).round(3).to_string())
 
 
+# ---------------------------------------------------------------- tipping robustness (D76)
+
+KAPPAS = [5, 12.5, 25, 50]                           # kappa fixed, the other parameters refit
+TIP_KEY, TIP_BUDGETS, N_REFIT = "charliehebdo", [0.05, 0.10], 10
+TIP_CKPT = "phase7_tipping_fits"
+TIP_RAY_CKPT = os.path.join(sair.CKPT_DIR, "phase7_tipping_rays.jsonl")
+
+
+def tipping_fits(pool, main):
+    """Refit the main model on CH with kappa fixed at each KAPPAS value, and with the fallback P1 = 0.5 (kappa free):
+    one warm start from the main fit plus N_REFIT random starts each (checkpointed). Returns tag -> (context key, x, k)."""
+    table = pd.read_csv(os.path.join(dp.RESULTS, "phase5_params.csv"))
+    x_main = sair.params_of(table[(table["set"] == TIP_KEY) & (table["model"] == main)].iloc[0], main)
+    warm = dict(zip(sair.NAMES[main], x_main))
+    variants = [(f"kappa{k:g}", TIP_KEY, {"kappa": float(k)}) for k in KAPPAS] + [("fb_half", (TIP_KEY, "fallback_half"), None)]
+    jobs = []
+    for tag, ctx_key, fixed in variants:
+        free = sair.free_names(main, fixed)
+        starts = [sair.to_fit(free, np.clip([warm[n] for n in free], *zip(*[sair.RANGE[n] for n in free])))]
+        starts += sair.random_starts(free, N_REFIT, dp.SEED)
+        jobs += [{"key": ctx_key, "kind": main, "u0": u0, "tag": tag, "fixed": fixed, "maxfev": 5000} for u0 in starts]
+    res = sair.run_jobs(pool, jobs, "phase 7 tipping refits", ckpt=TIP_CKPT)
+    out = {}
+    for tag, ctx_key, fixed in variants:
+        best, n_conv = sair.best_of(res[tag])
+        out[tag] = (ctx_key, np.array(best["x"]), len(sair.free_names(main, fixed)), n_conv, len(res[tag]))
+    return out, x_main
+
+
+def tipping_rays(pool, main, variants):
+    jobs = []
+    for tag, (ctx_key, x, *_ ) in variants.items():
+        for name, a, b in ray_dirs():
+            jobs.append((f"tray|{tag}|{name}", ("ray", (TIP_KEY, main, name, a, b) + GRID_CAP + (tag, ctx_key, [float(v) for v in x]))))
+    return run_jobs(pool, jobs, dispatch, "phase 7 tipping rays", ckpt=TIP_RAY_CKPT)
+
+
+def tipping_tables(main, variants, x_main, done):
+    """phase7_kappa_fits.csv (fit quality per variant) and phase7_tipping.csv (CH strategies at E = 5 / 10% per variant)."""
+    names = sair.NAMES[main]
+    main_ctx = sair.get_context(TIP_KEY)
+    fits, rows = [], []
+    allv = {"main": (TIP_KEY, x_main, len(names), np.nan, np.nan), **variants}
+    for tag, (ctx_key, x, k, n_conv, n_st) in allv.items():
+        sc = sair.get_context(ctx_key)
+        m = sair.metrics(*sair.residuals(sc, main, x), k)
+        fits.append({"variant": tag, "k_free": k, **dict(zip(names, x)), "SSE": m["SSE"], "AIC": m["AIC"], "BIC": m["BIC"],
+                     "starts_converged": n_conv, "starts": n_st, "bound_flags": sair.bound_flags(
+                         [n for n in names if not (tag.startswith("kappa") and n == "kappa")],
+                         [v for n, v in zip(names, x) if not (tag.startswith("kappa") and n == "kappa")])})
+    fits = pd.DataFrame(fits)
+    fits["dAIC_vs_main"] = fits["AIC"] - fits.loc[fits["variant"] == "main", "AIC"].iloc[0]
+    strat = pd.read_csv(OUT["strategies"])
+    strat = strat[(strat["model"] == main) & (strat["set"] == TIP_KEY) & (strat["range"] == "grid")]
+    for tag, (ctx_key, x, *_) in allv.items():
+        if tag != "main":
+            _VARIANT[tag] = (ctx_key, x)
+        t = None if tag == "main" else tag
+        base = run_point(TIP_KEY, main, 0, 0, tag=t)
+        for bud in TIP_BUDGETS:
+            for name in STRAT:
+                if tag == "main":
+                    r = strat[(strat["budget"] == bud) & (strat["strategy"] == name)]
+                    rows.append({"variant": tag, "budget": bud, "strategy": name, **({"reachable": False} if not r["reachable"].iloc[0] else {
+                        "reachable": True, "lam_u": r["lam_u"].iloc[0], "lam_v": r["lam_v"].iloc[0], "D_over_D0": r["D_over_D0"].iloc[0],
+                        "C_A_final": r["C_A_final"].iloc[0], "C_I_final": r["C_I_final"].iloc[0]}), "C_A_final_no_control": base["C_A_final"]})
+                    continue
+                ray_rows = pd.DataFrame([x for i, rs in done.items() if i.startswith(f"tray|{tag}|") for x in rs])
+                pick = ray_rows["ray"].str.startswith("hybrid") if name == "hybrid" else (ray_rows["ray"] == name)
+                sel = ray_rows[(ray_rows["kind"] == "root") & (ray_rows["budget"] == bud) & pick]
+                if sel.empty:
+                    rows.append({"variant": tag, "budget": bud, "strategy": name, "reachable": False, "C_A_final_no_control": base["C_A_final"]})
+                    continue
+                b = sel.loc[sel["D"].idxmin()]
+                rows.append({"variant": tag, "budget": bud, "strategy": name, "reachable": True, "lam_u": b["lam_u"], "lam_v": b["lam_v"],
+                             "D_over_D0": b["D"] / base["D"], "C_A_final": b["C_A_final"], "C_I_final": b["C_I_final"],
+                             "C_A_final_no_control": base["C_A_final"]})
+    tip = pd.DataFrame(rows)
+    tip["tipped"] = (tip["D_over_D0"] < 0.5) & (tip["C_A_final"] > 0.5)           # exposure halved AND the A side takes over
+    return fits, tip
+
+
+def tipping_report(fits, tip):
+    pd.set_option("display.width", 220)
+    print("=== CH refits for the tipping robustness (D76) ===")
+    print(fits[["variant", "k_free", "beta", "alpha", "gamma", "eps", "kappa", "theta", "eta_I", "eta_A", "SSE", "AIC",
+                "dAIC_vs_main", "starts_converged", "bound_flags"]].round(4).to_string(index=False))
+    print("=== CH strategies at equal effort per variant: D/D0 (lam_u, lam_v), final C_A; tipped = D/D0 < 0.5 and C_A > 0.5 ===")
+    for bud in TIP_BUDGETS:
+        print(f"--- E = {100 * bud:g}% of N")
+        for v in tip["variant"].unique():
+            t = tip[(tip["variant"] == v) & (tip["budget"] == bud)].set_index("strategy")
+            cells = [f"{n}: " + (f"{t.loc[n, 'D_over_D0']:.3f} ({t.loc[n, 'lam_u']:.3g}, {t.loc[n, 'lam_v']:.3g}) C_A {t.loc[n, 'C_A_final']:.2f}"
+                                 + (" TIPPED" if t.loc[n, "tipped"] else "") if t.loc[n, "reachable"] else "unreachable") for n in STRAT]
+            print(f"{v:14s} (no-control C_A {t['C_A_final_no_control'].iloc[0]:.3f})  " + "   ".join(cells))
+
+
 # ---------------------------------------------------------------- check
+
+def ref_hours(key):
+    return np.arange(0, sair.get_context(key)["end_h"] + 1e-9, 1.0)
+
 
 def check(main):
     print("\n--- Phase 7 check ---")
@@ -424,7 +539,9 @@ def check(main):
     for key in SETS:
         sc, x, gamma, t90 = setup(key, main)
         # 1. lam = 0 reproduces the Phase 5 main-model run exactly (saved curves written by Phase 5, and the Phase 5 step)
-        _, r0 = run_point(key, main, 0, 0, record=True)
+        _, r0 = run_point(key, main, 0, 0, record=True, div=1)          # the Phase 5 step: exact reproduction
+        _, r0f = run_point(key, main, 0, 0, record=True)                # the step used in Phase 7 (finer on Sydney)
+        dfine = float(np.abs(np.interp(ref_t := ref_hours(key), r0["t"], r0["I"]) - np.interp(ref_t, r0f["t"], r0f["I"])).max())
         ref = pd.read_csv(os.path.join(dp.PROCESSED, f"model_curves_{key}.csv"))
         cols = ["S", "I", "A", "R", "C_I", "C_A", "d1", "d2", "t"]
         d_ref = float(np.abs(r0[cols].to_numpy() - ref[cols].to_numpy()).max())
@@ -477,7 +594,7 @@ def check(main):
                     bad = np.where(np.diff(d) > 1e-9)[0]
                     for k in bad:
                         viol.append((model, key, f"{fixed}={val:g}", f"{along}: {sorted(line[along])[k]:g}->{sorted(line[along])[k + 1]:g}", float(d[k + 1] - d[k])))
-        print(f"{key:22s} OK  lam=0 == Phase 5 run (max diff {d_ref:.1e})  max|sum-1|={worst_sum:.1e}  states in [{lo:.1e}, {hi:.6f}]  "
+        print(f"{key:22s} OK  lam=0 == Phase 5 run (max diff {d_ref:.1e}; Phase 7 step vs Phase 5 step {dfine:.1e})  max|sum-1|={worst_sum:.1e}  states in [{lo:.1e}, {hi:.6f}]  "
               f"dt vs dt/2 <= {worst_dt:.1e} (D, peak rel. {worst_D:.1e})  numba == Python ({worst_nb:.1e})")
     r = strat[strat["reachable"] == True]
     assert (np.abs(r["E_total"] - r["budget"]) < 1e-5).all(), "equal-effort points are not at the budget"
@@ -498,6 +615,19 @@ def check(main):
 
 if __name__ == "__main__":
     main, _ = sair.load_main()
+    if "--tipping" in sys.argv:
+        get = sair.get_context(TIP_KEY)
+        with ProcessPoolExecutor(max_workers=sair.N_WORKERS) as pool:
+            variants, x_main = tipping_fits(pool, main)
+            for tag, (ctx_key, x, *_) in variants.items():
+                _VARIANT[tag] = (ctx_key, x)
+            variants["fb_half_fixed"] = ((TIP_KEY, "fallback_half"), x_main, len(sair.NAMES[main]), np.nan, np.nan)   # fallback only, no refit
+            done = tipping_rays(pool, main, variants)
+        fits, tip = tipping_tables(main, variants, x_main, done)
+        fits.to_csv(os.path.join(dp.RESULTS, "phase7_kappa_fits.csv"), index=False)
+        tip.to_csv(os.path.join(dp.RESULTS, "phase7_tipping.csv"), index=False)
+        tipping_report(fits, tip)
+        sys.exit(0)
     if "--check-only" not in sys.argv:
         stages = [int(sys.argv[sys.argv.index("--stage") + 1])] if "--stage" in sys.argv else [1, 2]
         if "--fresh" in sys.argv and 1 in stages and os.path.exists(CKPT):

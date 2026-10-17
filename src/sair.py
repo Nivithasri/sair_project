@@ -167,10 +167,11 @@ def full_params(kind, free, x_free, fixed=None):
     return np.array([p[n] for n in NAMES[kind]], dtype=float)
 
 
-def step_dt(sc, kind, params):
-    """bin / 50, halved until the largest rate * dt <= RATE_STEP (piecewise constant in the parameters)."""
+def step_dt(sc, kind, params, u=0.0, v=0.0):
+    """bin / 50, halved until the largest rate * dt <= RATE_STEP (piecewise constant in the parameters);
+    the SAIR-C knobs u, v (Phase 7) are part of the largest-rate rule."""
     p = dict(zip(NAMES[kind], params))
-    rate = max([1.0] + [p[n] for n in RATES if n in p] + [p.get("eta_I", 0.0) + p.get("eta_A", 0.0)])
+    rate = max([1.0, u, v] + [p[n] for n in RATES if n in p] + [p.get("eta_I", 0.0) + p.get("eta_A", 0.0)])
     dt = sc["bin_h"] / STEPS_PER_BIN
     while rate * dt > RATE_STEP:
         dt /= 2
@@ -230,6 +231,9 @@ def set_context(key, variant="profile"):
             "rank_table": rank_table_of(ctx["model"], ctx["user_trait"], ctx["static"]), "stories": ctx["stories"],
             "src_t": src["t_h"].to_numpy(), "src_to_i": (src["stance"] == "support").to_numpy(),
             "src_share": (src["w"] / src["w"].sum()).to_numpy(),
+            # kept for Phase 8 targeting: friend matrix, data sides / entry times, source authors, followers
+            "M": M, "side": side, "t_enter": t_enter, "src_user": src["user_id"].to_numpy(), "src_wsum": float(src["w"].sum()),
+            "followers": users.set_index("user_id")["followers_count"].reindex(ctx["users"]).fillna(0).to_numpy(float),
             "I0": c_i_curve[0], "A0": c_a_curve[0], "C_I": c_i_curve, "C_A": c_a_curve,
             "fin_I": c_i_curve[-1], "fin_A": c_a_curve[-1],
             "I_display": curves["I"].to_numpy() / N, "A_display": curves["A"].to_numpy() / N,
@@ -243,7 +247,9 @@ def get_context(key):
     """Cached context (one copy per process; workers build their own on first use).
     key = set name, or (set name, knock-out name) for a Phase 6 knock-out context (src/ablation.py)."""
     if key not in _CONTEXTS:
-        if isinstance(key, tuple):
+        if isinstance(key, tuple) and key[1] == "fallback_half":
+            _CONTEXTS[key] = {**get_context(key[0]), "fallback_half": True}   # P1 = 0.5 for users without sided friends (D76)
+        elif isinstance(key, tuple):
             import ablation                                    # Phase 6 knock-outs build on the set context
             _CONTEXTS[key] = ablation.ko_context(*key)
         else:
@@ -258,14 +264,14 @@ def drif1_vector(sc, k, c_i, c_a, I, A, kappa, pop_k, kind, freeze_k=None, rho_o
     kd = k if freeze_k is None else min(k, freeze_k)
     mask = sc["not_entered"][kd]
     if (sc["p1_mode"] or P1_MODE[kind]) == "global":
-        p1 = I / (I + A) if I + A > 0 else 0.5
+        p1 = 0.5 if sc.get("fallback_half") else (I / (I + A) if I + A > 0 else 0.5)
     else:
         N = sc["N"]
         rho_i = np.clip(c_i * N / sc["c_i_data"][kd], 0, RHO_MAX) if sc["c_i_data"][kd] > 0 and not rho_one else 1.0
         rho_a = np.clip(c_a * N / sc["c_a_data"][kd], 0, RHO_MAX) if sc["c_a_data"][kd] > 0 and not rho_one else 1.0
         num = rho_i * sc["n_i"][kd]
         den = num + rho_a * sc["n_a"][kd]
-        fallback = I / (I + A) if I + A > 0 else 0.5
+        fallback = 0.5 if sc.get("fallback_half") else (I / (I + A) if I + A > 0 else 0.5)
         p1 = np.where(den > 0, num / np.where(den > 0, den, 1.0), fallback)
     if ME_MODE[kind] == "uniform":
         me = kappa
