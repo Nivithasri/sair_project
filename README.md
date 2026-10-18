@@ -41,13 +41,12 @@ src/
   targeting.py      Phase 8  centrality targeting on PHEME (Part A) and the BA agent model (Part B)
   report_check.py   Phase 9  generates the report tables from the CSVs and checks every quoted number
   export_report.py  Phase 9  REPORT.md -> REPORT.pdf
-  slides.py         Phase 9  presentation/slides.pptx (+ PNG render check)
-docs/               REPORT.md / .pdf, VIVA_QA.md, HANDOFF.md, paper notes (SAIR_paper.md, extension.md, DRDB_reference.md)
+docs/               REPORT.md / .pdf, VIVA_QA.md, paper notes (SAIR_paper.md, extension.md, DRDB_reference.md)
 results/            every table (CSV) and figure (PNG)
 notebooks/          experiments.ipynb: reruns everything from checkpoints and redraws every figure
-presentation/       slides.pptx and the slide renders
+presentation/       slides.pptx
 data/raw/           downloaded data (not in git; see data/raw/README.md); data/processed/ intermediate files and checkpoints
-DECISIONS.md        corrections C1–C6 and decisions D1–D83     PLAN.md   phase plan
+DECISIONS.md        corrections C1–C6 and decisions D1–D83
 ```
 
 ## How to run
