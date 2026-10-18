@@ -1,7 +1,7 @@
 # Implementation Phase Plan
 
 Each phase: plan → code → run check → show results → stop for approval.
-**Status:** Phases 1–8 done (Phase 5 refit D57–D71, Phase 6 D67, Phase 7 D73–D76, Phase 8 D77–D82). Phase 9 not started.
+**Status:** Phases 1–8 done (Phase 5 refit D57–D71, Phase 6 D67, Phase 7 D73–D76, Phase 8 D77–D82, Phase 9 D83). **All phases done (v1.0).**
 Main model for Phases 6–8: **(d+)-uniform** (D69). Plan for 7–9: D72.
 See `docs/HANDOFF.md` for results and findings.
 Equations and definitions live in `docs/SAIR_paper.md` and `docs/extension.md`.
@@ -131,9 +131,15 @@ checkpoints `data/processed/checkpoints/phase8_{pheme_v2,ba,ba_inject,ba_calibra
 BA: seeds, state initialisation, monotone cumulative counts, A seeds at 25 h, reproducibility, injection events (distinct hubs, blocked hub removes its event, denying hub never
 blocked, recruit injection moves mass). (The user's CHECKS list of the first spec was empty; these are ours.)
 
-## Phase 9 — Packaging
-0. Optional (D72): extra recovery starts for the main model (more random starts or cross-model seeding per noise seed),
-   to separate optimiser failure from non-identifiability.
-1. Results table (RMSE, strategy costs, peak reduction per centrality).
-2. README: problem, pipeline, contributions, corrections (from DECISIONS.md), limitations, future work.
-3. `notebooks/experiments.ipynb` runs top to bottom.
+## Phase 9 — Packaging  ✅ DONE (D83)
+0. Extra recovery starts for the main model (30 starts × 5 seeds + a start at the truth): `python src/sair.py --recovery-extra`,
+   `results/phase5_recovery_extra.csv` (optimiser failure vs non-identifiability: κ is the non-identifiable parameter).
+1. `docs/REPORT.md` / `REPORT.pdf` (paper-style; tables generated from the CSVs; `src/report_check.py` checks every quoted number;
+   `src/export_report.py` makes the PDF).
+2. `README.md` (summary, findings, repo map, how to run, figure sources, citations), `requirements.txt`.
+3. `presentation/slides.pptx` (18 slides, `src/slides.py`; `--render` exports PNGs to `presentation/render/` and checks the layout).
+4. `docs/VIVA_QA.md` (25 questions and answers).
+5. `notebooks/experiments.ipynb` (runs top to bottom from the checkpoints and redraws every figure).
+6. Final clean-up, all phase checks, tag `v1.0`.
+
+**Check:** every phase's `--check-only`; `python src/report_check.py`; `python src/slides.py --render` (layout check); the notebook executes.

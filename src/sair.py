@@ -1053,6 +1053,49 @@ def stage2(pool):
                 "param_most_different"]].round(6).to_string(index=False))
 
 
+# ---------------------------------------------------------------- extra recovery starts (Phase 9, optional, D83)
+
+N_EXTRA_STARTS = 30
+
+
+def recovery_extra(pool):
+    """Main model on CH: the same 5 noisy targets as Stage 2, refit from 30 fresh random starts per noise seed plus one oracle start
+    at the true parameters. If the oracle start reaches the noise floor but the random starts do not, the Stage 2 recovery failures
+    were the optimiser; if random starts reach the floor with different parameters, the parameters are not identifiable."""
+    main, table = load_main()
+    sc = get_context("charliehebdo")
+    x_true = params_of(table[(table["set"] == "charliehebdo") & (table["model"] == main)].iloc[0], main)
+    jobs = []
+    for seed in RECOVERY_SEEDS:
+        target = recovery_target(sc, main, x_true, seed)
+        jobs += start_jobs("charliehebdo", main, ("recx", seed), n=N_EXTRA_STARTS, seed=dp.SEED + 100 + seed, target=target,
+                           basis=fingerprint(x_true))
+        jobs.append({"key": "charliehebdo", "kind": main, "u0": to_fit(NAMES[main], np.clip(x_true, *zip(*[RANGE[n] for n in NAMES[main]]))),
+                     "tag": ("recx_oracle", seed), "target": target, "basis": fingerprint(x_true)})
+    res = run_jobs(pool, jobs, "extra recovery starts", "recovery_extra")
+    rows = []
+    for seed in RECOVERY_SEEDS:
+        ti, ta = recovery_target(sc, main, x_true, seed)
+        t_arr, c_i, c_a = simulate(sc, main, x_true)
+        mi, ma = model_on_grid(sc, t_arr, c_i, c_a)
+        floor = float(np.mean(np.r_[mi - ti, ma - ta] ** 2))                 # MSE of the true parameters on this noisy target
+        runs = res[("recx", seed)]
+        best, n_conv = best_of(runs)
+        oracle = res[("recx_oracle", seed)][0]
+        at_floor = sum(r["mse"] <= 1.05 * floor for r in runs)
+        for n, tv, rv, ov in zip(NAMES[main], x_true, best["x"], oracle["x"]):
+            rows.append({"noise_seed": seed, "parameter": n, "true": tv, "best_random": rv,
+                         "pct_error_best_random": 100 * (rv - tv) / tv if tv != 0 else np.nan, "oracle_start": ov,
+                         "pct_error_oracle": 100 * (ov - tv) / tv if tv != 0 else np.nan,
+                         "noise_floor_mse": floor, "best_random_mse": best["mse"], "oracle_mse": oracle["mse"],
+                         "random_starts_at_floor": at_floor, "random_starts": len(runs), "random_converged": n_conv})
+    out = pd.DataFrame(rows)
+    out.to_csv(os.path.join(dp.RESULTS, "phase5_recovery_extra.csv"), index=False)
+    summ = out.groupby("noise_seed").first()[["noise_floor_mse", "best_random_mse", "oracle_mse", "random_starts_at_floor", "random_starts"]]
+    print(summ.to_string())
+    print(out.pivot(index="parameter", columns="noise_seed", values="pct_error_best_random").round(1).to_string())
+
+
 # ---------------------------------------------------------------- check
 
 NESTING_TESTS = [("sairh", "const"), ("sairh_plus", "const_plus"), ("sairh_uniform", "const"),
@@ -1162,6 +1205,11 @@ def check2():
 
 
 if __name__ == "__main__":
+    if "--recovery-extra" in sys.argv:
+        get_context("charliehebdo")
+        with ProcessPoolExecutor(max_workers=N_WORKERS) as pool:
+            recovery_extra(pool)
+        sys.exit(0)
     stages = [int(sys.argv[sys.argv.index("--stage") + 1])] if "--stage" in sys.argv else [1, 2]
     if "--check-only" not in sys.argv:
         if "--fresh" in sys.argv:

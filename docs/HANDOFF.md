@@ -1,14 +1,15 @@
 # Session handoff — read this first
 
-Last updated: 2026-10-18 (session 4: Phases 7 and 8 done). Phase 7 commit: see `git log` (message "Phase 7: SAIR-C control").
-Companion files: `CLAUDE.md` (rules + fixed decisions), `PLAN.md` (phases), `DECISIONS.md` (D1–D82, every
+Last updated: 2026-10-18 (session 4: all phases done, tagged v1.0). Phase 7 commit: see `git log` (message "Phase 7: SAIR-C control").
+Companion files: `CLAUDE.md` (rules + fixed decisions), `PLAN.md` (phases), `DECISIONS.md` (D1–D83, with a final index, every
 choice and deviation with numbers), `data/raw/README.md` (data provenance and licences).
 
 ---
 
 ## 0. Summary (start here)
 
-- **Status:** Phases 1–8 done (Phase 7 = SAIR-C D73–D76, Phase 8 = targeting D77–D82). **Phase 9 not started.**
+- **Status: project complete (v1.0).** Phases 1–9 done (Phase 7 = SAIR-C D73–D76, Phase 8 = targeting D77–D82, Phase 9 = packaging D83).
+  Deliverables: `docs/REPORT.md` + `REPORT.pdf`, `presentation/slides.pptx`, `docs/VIVA_QA.md`, `README.md`, `notebooks/experiments.ipynb`.
 - **Main model for Phases 7–8: (d+)-uniform** = SAIR-H + Bass external influence, network P1, uniform Mult_eff = κ.
   It was chosen as the SAIR-H-family model with the **best total AIC over the three sets (D69)**: total AIC −4295.2,
   BIC −4217.8. Load it with `kind, table = sair.load_main()`.
@@ -36,7 +37,10 @@ choice and deviation with numbers), `data/raw/README.md` (data provenance and li
   effect). Unchanged at both α CI ends (refits +39.5 / +11.5 AIC). **BA with source injection on hubs is calibrated (β×2, α×0.1) and passes the validation criteria** (final C_I .879 vs
   .895, C_A .025 vs .019, I peaks before A; shape RMSE .134, moderate): hubs beat random by a wide margin (block 90% vs ≤ 3.5%, hybrid 99% vs 63–79%), the three centralities are
   indistinguishable, conformity contributes ≤ 3.5% of block and 10–23% of recruit. The seeds-only BA variant stays labelled "qualitative only". Details §3b, D77–D82.
-- **Next task:** Phase 9 (packaging, optional extra recovery starts, D72). **Wait for the user's spec/approval.**
+- **Extra recovery (D83):** from the true parameters every seed reaches the noise floor and β, α, γ, ε, θ are recovered within 8.3%, κ is not
+  (moves to 50 at the same fit); random starts reach the floor in 2 of 150 runs. So earlier recovery failures were the optimiser, and κ is the
+  non-identifiable parameter.
+- **Next task:** none planned. Possible extensions are listed in REPORT Section 8.
 - **Rules that matter most:** strict honesty, report negative results, never tune to make a model win, never relax the
   leakage rules (§5), log every deviation in `DECISIONS.md`, one phase at a time and then stop, no Claude attribution in git.
 
@@ -97,7 +101,7 @@ the source stance; the **first** support/deny post fixes I or A (no switching); 
 | 6 Ablation | `src/ablation.py` | **done** (main model + paper-faithful (d+)) | `dc97afe` |
 | 7 SAIR-C | `src/control.py` (+ `_advance` / `simulate` extended in `sair.py`) | **done** (D73–D75) | see `git log` |
 | 8 Targeting | `src/targeting.py` | **done** (D77–D80) | see `git log` |
-| 9 Packaging | — | not started | — |
+| 9 Packaging | `src/report_check.py`, `export_report.py`, `slides.py` | **done** (D83) | tag `v1.0` |
 
 ---
 
@@ -366,13 +370,13 @@ CH s = 0.01 recruit: injection alone .005, friend counts alone .105, both .815 (
 
 ---
 
-## 6. NEXT TASK — Phase 9: packaging (PLAN.md)
+## 6. Final state and how to rebuild the deliverables
 
-**Wait for the user's spec.** Contents per PLAN.md: optional extra recovery starts for the main model (D72), results table (RMSE, strategy costs,
-peak reduction per centrality), README (problem, pipeline, contributions, the corrections of DECISIONS.md, limitations incl. D60, D80),
-`notebooks/experiments.ipynb`. Honest-reporting items to carry into the README: Eq. 26 loses (D49), per-user factors unsupported (D67),
-"hybrid is best" holds only on CH at 10% (D75), tipping depends on the fallback P1 (D76), targeting works through source injection (D78),
-the BA agent model fails validation (D80).
+- Report: `python src/report_check.py --write` (refresh the tables from the CSVs), `python src/report_check.py` (verify; 28 tables, 61 claims),
+  `python src/export_report.py` (PDF). Prose numbers that are not in a table must be added to `claims()` in `src/report_check.py`.
+- Slides: `python src/slides.py --render` (needs PowerPoint for the PNG render and layout check; building alone needs only python-pptx).
+- Notebook: `notebooks/experiments.ipynb` reruns everything from the checkpoints (about 5 min).
+- If any result changes, rerun the affected phase, then the three commands above; the check fails if a quoted number no longer matches.
 
 ---
 
@@ -389,6 +393,7 @@ Set `LOKY_MAX_CPU_COUNT=4` to silence a harmless joblib warning on Windows (`[Wi
 | 4 | `python src/drive.py --check` | ~30 s | `data/processed/{drive,drive_model,friends}_<set>[_followgroups].*`, `results/phase4_*` |
 | 5 | `python src/sair.py --check` (stage 1 then 2) · `--stage 1\|2 --check` · `--fresh` (drop the stages' checkpoints) · `--check-only` | from scratch ~6–8 h on 12 cores; from checkpoints minutes | `results/phase5_*.csv`, `phase5_plot1/2/2b/2c_*.png`, `data/processed/model_curves_<set>.csv` (main model) |
 | 6 | `python src/ablation.py --check` (`--check-only`) | ~1.5–2 h from scratch (refits checkpointed) | `results/phase6_*.csv`, `phase6_plot3*_*.png`, `data/processed/ablation_edges_<set>.csv` |
+| 9 | `python src/sair.py --recovery-extra`; `python src/report_check.py`; `python src/export_report.py`; `python src/slides.py --render` | ~1.5 h (recovery, checkpointed); seconds; ~10 s; ~1 min | `results/phase5_recovery_extra.csv`, `docs/REPORT.pdf`, `presentation/` |
 | 8 | `python src/targeting.py --part A or B or AB --check` (`--fresh`, `--check-only`) | A ~25 min (22 α refits ~12 min + 140 jobs), B ~15 min (25 calibration + 260 jobs, checkpointed; the first BA run builds 10 graphs; set `PYTHONIOENCODING=utf-8` when redirecting output) | `results/phase8_{pheme,channels,effort,alpha_fits,ba,ba_validation,ba_calibration}.csv`, `phase8_plot6/6b/7/8/8b/8c/9_*.png` |
 | 7 | `python src/control.py --check` (`--stage 1\|2`, `--fresh`, `--check-only`; `--tipping` = CH κ / fallback refits, ~25 min) | ~2.5 min stage 1 (147 jobs, 12 workers, checkpointed), seconds for stage 2 | `results/phase7_{grid,strategies,feedback,cost}.csv`, `phase7_plot4/5/5b_*.png` |
 
@@ -413,4 +418,4 @@ Each module runs its own phase check with `--check`. Every phase check must pass
 
 ## 8. Open decisions
 
-None blocking. For Phase 8: BA network size and m; whether to also repeat the feedback test there.
+None.
