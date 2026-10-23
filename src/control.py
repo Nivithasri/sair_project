@@ -14,6 +14,7 @@ Usage:
     python src/control.py --stage 1|2 ...     one stage only
     python src/control.py --fresh ...         delete the stage-1 checkpoint first
     python src/control.py --check-only        check on the saved results
+    python src/control.py --plot4-10pct       Plot 4b (E = 10% of N, with C_A(t)) from the saved phase7_strategies.csv
 """
 import json
 import os
@@ -316,26 +317,58 @@ def done_rows(done, kind, model, mode):
 
 # ---------------------------------------------------------------- plots
 
-def plot4(strat, main):
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4.2))
-    for ax, key in zip(axes, SETS):
-        sc = sair.get_context(key)
-        s = strat[(strat["model"] == main) & (strat["set"] == key) & (strat["budget"] == 0.05) & (strat["range"] == "grid")].set_index("strategy")
+def plot4(strat, main, budget=0.05):
+    """I(t) of the best equal-effort point of each strategy at E = budget (grid range, re-run with record).
+    E = 10% (Plot 4b) adds a C_A(t) row so the CH tipping (corrections taking over) is visible, and checks that each
+    re-run's D/D0 equals the phase7_strategies.csv value shown in the legend."""
+    ca_row = budget != 0.05
+    fig, axes = plt.subplots(2 if ca_row else 1, 3, figsize=(15, 8.4 if ca_row else 4.2), squeeze=False)
+    worst = 0.0
+    for col, key in enumerate(SETS):
+        ax = axes[0, col]
+        s = strat[(strat["model"] == main) & (strat["set"] == key) & (strat["budget"] == budget) & (strat["range"] == "grid")].set_index("strategy")
+        d0 = None
         for name in ["none"] + STRAT:
             lu, lv = (0, 0) if name == "none" else (s.loc[name, "lam_u"], s.loc[name, "lam_v"]) if s.loc[name, "reachable"] else (None, None)
             if lu is None:
                 continue
-            _, res = run_point(key, main, lu, lv, record=True)
-            lab = STRAT_LABEL[name] + ("" if name == "none" else f"  (λu={lu:.2g}, λv={lv:.2g}; D/D0={s.loc[name, 'D_over_D0']:.2f})")
+            o, res = run_point(key, main, lu, lv, record=True)
+            if name == "none":
+                d0 = o["D"]
+            elif ca_row:
+                diff = abs(o["D"] / d0 - s.loc[name, "D_over_D0"])
+                worst = max(worst, diff)
+                print(f"{key:22s} {name:7s} lam_u={lu:.4g} lam_v={lv:.4g}  D/D0 re-run {o['D'] / d0:.6f}  csv {s.loc[name, 'D_over_D0']:.6f}  "
+                      f"diff {diff:.1e}  C_A final {o['C_A_final']:.3f}")
+            lab = STRAT_LABEL[name] + ("" if name == "none" else
+                                       f"  (λu={lu:.2g}, λv={lv:.2g}; D/D0={s.loc[name, 'D_over_D0']:.{3 if ca_row else 2}f})")
             ax.plot(res["t"], 100 * res["I"], color=STRAT_COLOR[name], lw=2, label=lab, ls="--" if name == "none" else "-")
+            if ca_row:
+                axes[1, col].plot(res["t"], 100 * res["C_A"], color=STRAT_COLOR[name], lw=2, label=STRAT_LABEL[name],
+                                  ls="--" if name == "none" else "-")
         ax.set_title(sair.set_title(key))
         ax.set_xlabel("time (h)")
         ax.set_ylabel("I (% of N)")
         ax.legend(fontsize=7)
         ax.grid(alpha=0.25)
-    fig.suptitle(f"Plot 4 - rumour prevalence I(t) under the four strategies at equal total effort E = 5% of N ({sair.MODEL_LABEL[main]})")
+        if ca_row:
+            a2 = axes[1, col]
+            a2.axhline(50, color="black", lw=0.8, ls=":", label="C_A = 50% of N (tipping threshold)")
+            a2.set_title(sair.set_title(key) + " - cumulative corrections C_A(t)")
+            a2.set_xlabel("time (h)")
+            a2.set_ylabel("C_A (% of N)")
+            a2.legend(fontsize=7)
+            a2.grid(alpha=0.25)
+    if ca_row:
+        assert worst < 1e-9, f"Plot 4b: re-run D/D0 differs from phase7_strategies.csv ({worst:.1e})"
+        print(f"Plot 4b: legend D/D0 == phase7_strategies.csv, re-run max diff {worst:.1e}")
+        fig.suptitle(f"Plot 4b - rumour prevalence I(t) under the four strategies at equal total effort E = {100 * budget:g}% of N")
+        name = f"phase7_plot4_strategies_{100 * budget:g}pct.png"
+    else:
+        fig.suptitle(f"Plot 4 - rumour prevalence I(t) under the four strategies at equal total effort E = 5% of N ({sair.MODEL_LABEL[main]})")
+        name = "phase7_plot4_strategies.png"
     fig.tight_layout()
-    fig.savefig(os.path.join(dp.RESULTS, "phase7_plot4_strategies.png"), dpi=130)
+    fig.savefig(os.path.join(dp.RESULTS, name), dpi=130)
     plt.close(fig)
 
 
@@ -399,6 +432,7 @@ def stage2(done, main):
     fbk.to_csv(OUT["feedback"], index=False)
     cost.to_csv(OUT["cost"], index=False)
     plot4(strat, main)
+    plot4(strat, main, 0.10)
     plot5(g, cost, main)
     plot5b(g, strat, main)
     report(g, cost, strat, fbk, main)
@@ -627,6 +661,9 @@ if __name__ == "__main__":
         fits.to_csv(os.path.join(dp.RESULTS, "phase7_kappa_fits.csv"), index=False)
         tip.to_csv(os.path.join(dp.RESULTS, "phase7_tipping.csv"), index=False)
         tipping_report(fits, tip)
+        sys.exit(0)
+    if "--plot4-10pct" in sys.argv:                     # Plot 4b only, from the saved equal-effort points (no re-search)
+        plot4(pd.read_csv(OUT["strategies"]), main, 0.10)
         sys.exit(0)
     if "--check-only" not in sys.argv:
         stages = [int(sys.argv[sys.argv.index("--stage") + 1])] if "--stage" in sys.argv else [1, 2]
