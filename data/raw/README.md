@@ -10,7 +10,7 @@ Each original archive is kept unmodified next to the extracted subset, so the fu
 | `rumoureval2019/` | Cross-check of stance labels (same threads, SDQC labels) |
 | `pheme_rnr/` | Fallback / robustness only: more threads, but no stance and no follow edges |
 
----
+--- 
 
 ## 1. `pheme_rumour_scheme/` — PHEME rumour scheme dataset: journalism use case (v2)
 - URL: https://figshare.com/articles/PHEME_rumour_scheme_dataset_journalism_use_case/2068650
