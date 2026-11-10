@@ -1,6 +1,5 @@
 # Rumour vs. Correction: Network Propagation and Mitigation
 
-Nivithasri A and Harshan M V, M.Sc. Data Science, PSG College of Technology, Coimbatore, India
 
 When a false rumour spreads online during a crisis, a correction usually starts spreading too, and the two compete for the same
 people. This project models that competition as a contagion: every user starts as susceptible (S), then either spreads the rumour (I),
